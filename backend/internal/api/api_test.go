@@ -1,0 +1,628 @@
+package api
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"aibuddy/internal/agent"
+	"aibuddy/internal/app"
+	"aibuddy/internal/corp"
+	"aibuddy/internal/domain"
+	"aibuddy/internal/events"
+	"aibuddy/internal/flags"
+	"aibuddy/internal/identity"
+	"aibuddy/internal/knowledge"
+	"aibuddy/internal/kv"
+	"aibuddy/internal/mcp"
+	"aibuddy/internal/onboarding"
+	"aibuddy/internal/store"
+)
+
+var msk = time.FixedZone("MSK", 3*3600)
+
+type testEnv struct {
+	t      *testing.T
+	corp   *corp.Service
+	corpTS *httptest.Server
+	ts     *httptest.Server
+	app    *app.App
+	st     *store.Memory
+	clock  time.Time
+}
+
+func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
+	t.Helper()
+	e := &testEnv{t: t, clock: time.Date(2026, 11, 10, 12, 0, 0, 0, msk)}
+	now := func() time.Time { return e.clock }
+	svc, _ := corp.New(now, msk)
+	e.corp = svc
+	signer := identity.NewSigner("secret", now)
+	e.corpTS = httptest.NewServer(svc.Handler(signer, "buddy2026", "adm"))
+	t.Cleanup(e.corpTS.Close)
+	kb, _ := knowledge.Load()
+	tpl, _ := onboarding.LoadTemplate()
+	e.st = store.NewMemory()
+	corpClient := mcp.NewClient(e.corpTS.URL+"/mcp", 2*time.Second)
+	plan := func(ctx context.Context, u domain.User) (onboarding.Plan, error) {
+		s, err := e.st.StepStates(ctx, u.ID)
+		return tpl.Build(u, s, now()), err
+	}
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Now: now})
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	e.app = app.New(app.Config{CorpBaseURL: e.corpTS.URL, MsgRateLimit: 30},
+		app.Deps{Store: e.st, KV: kv.NewMemory(now), Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: events.NewHub(), Flags: ff, Now: now, Log: log})
+	e.ts = httptest.NewServer(New(e.app, kb, log, webDir, false).Handler())
+	t.Cleanup(e.ts.Close)
+	return e
+}
+
+func allOn() flags.Flags { return flags.FromEnv(func(string) string { return "" }) }
+
+type client struct {
+	t    *testing.T
+	e    *testEnv
+	hc   *http.Client
+	user domain.User
+}
+
+func (e *testEnv) login(login string) *client {
+	jar, _ := cookiejar.New(nil)
+	c := &client{t: e.t, e: e, hc: &http.Client{Jar: jar}}
+	var out struct{ User domain.User }
+	if code := c.do("POST", "/api/auth/login", map[string]string{"login": login, "password": "buddy2026"}, &out); code != 200 {
+		e.t.Fatalf("login %s: %d", login, code)
+	}
+	c.user = out.User
+	return c
+}
+
+func (c *client) do(method, path string, body any, out any) int {
+	c.t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req, _ := http.NewRequest(method, c.e.ts.URL+path, r)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Requested-With", "ai-buddy")
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if out != nil {
+		_ = json.NewDecoder(resp.Body).Decode(out)
+	}
+	return resp.StatusCode
+}
+
+type chatState struct {
+	Messages []domain.Message
+	Actions  []domain.Action
+}
+
+// ask отправляет сообщение и ждёт готовый ответ ассистента.
+func (c *client) ask(text string) (domain.Message, *domain.Action) {
+	c.t.Helper()
+	var sent struct{ User, Assistant domain.Message }
+	if code := c.do("POST", "/api/messages", map[string]string{"text": text}, &sent); code != 202 {
+		c.t.Fatalf("send %q: %d", text, code)
+	}
+	if sent.Assistant.Status != domain.MsgPending {
+		c.t.Fatal("assistant must start pending")
+	}
+	c.e.app.Wait()
+	var st chatState
+	c.do("GET", "/api/messages", nil, &st)
+	for _, m := range st.Messages {
+		if m.ID == sent.Assistant.ID {
+			for i := range st.Actions {
+				if st.Actions[i].ID == m.ActionID {
+					return m, &st.Actions[i]
+				}
+			}
+			return m, nil
+		}
+	}
+	c.t.Fatal("reply not found")
+	return domain.Message{}, nil
+}
+
+func TestInternDayOffEndToEnd(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	maria := e.login("maria")
+
+	// SSE: стажёр подписан на обновления
+	req, _ := http.NewRequest("GET", e.ts.URL+"/api/events", nil)
+	resp, err := anna.hc.Do(req)
+	if err != nil || resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("sse: %v", err)
+	}
+	lines := make(chan string, 100)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+		close(lines)
+	}()
+
+	msg, act := anna.ask("Хочу отгул в пятницу")
+	if act == nil || act.Status != domain.ActionProposed || act.Kind != domain.ActionAbsence {
+		t.Fatalf("proposal: %s %+v", msg.Text, act)
+	}
+	if len(msg.Trace) < 2 {
+		t.Fatal("trace must show progress")
+	}
+	// стажёр правит причину и подтверждает
+	var conf struct{ Action domain.Action }
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/confirm", map[string]any{"edits": map[string]any{"reason": "сессия в вузе"}}, &conf); code != 200 {
+		t.Fatalf("confirm: %d", code)
+	}
+	if conf.Action.Status != domain.ActionSubmitted || conf.Action.ExternalID == "" || conf.Action.Args["reason"] != "сессия в вузе" {
+		t.Fatalf("submitted: %+v", conf.Action)
+	}
+	// повторное подтверждение и отмена отправленного невозможны
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/confirm", map[string]any{}, nil); code != 400 {
+		t.Fatalf("double confirm: %d", code)
+	}
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/cancel", nil, nil); code != 400 {
+		t.Fatalf("cancel submitted: %d", code)
+	}
+	// руководитель видит заявку и согласует
+	var ap struct{ Approvals []app.Approval }
+	maria.do("GET", "/api/approvals", nil, &ap)
+	if len(ap.Approvals) != 1 || ap.Approvals[0].UserName != "Анна Смирнова" {
+		t.Fatalf("approvals: %+v", ap)
+	}
+	if code := anna.do("GET", "/api/approvals", nil, nil); code != 403 {
+		t.Fatal("intern must not see approvals")
+	}
+	if code := maria.do("POST", "/api/approvals/absence/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true, "comment": "Хорошего отдыха"}, nil); code != 200 {
+		t.Fatalf("decide: %d", code)
+	}
+	var acts struct{ Actions []domain.Action }
+	anna.do("GET", "/api/actions", nil, &acts)
+	if acts.Actions[0].Status != domain.ActionApproved {
+		t.Fatalf("approved: %+v", acts.Actions[0])
+	}
+	var notes struct{ Notifications []domain.Notification }
+	anna.do("GET", "/api/notifications", nil, &notes)
+	if len(notes.Notifications) < 2 || !strings.Contains(notes.Notifications[0].Text, "Хорошего отдыха") {
+		t.Fatalf("notifications: %+v", notes)
+	}
+	anna.do("POST", "/api/notifications/read", nil, nil)
+	anna.do("GET", "/api/notifications", nil, &notes)
+	if !notes.Notifications[0].Read {
+		t.Fatal("read")
+	}
+	// статус заявки виден в чате
+	if m, _ := anna.ask("какой статус моих заявок?"); !strings.Contains(m.Text, "согласована") {
+		t.Fatalf("status: %s", m.Text)
+	}
+	// SSE донёс обновления
+	got := ""
+	timeout := time.After(2 * time.Second)
+	for !strings.Contains(got, `"type":"action"`) {
+		select {
+		case l := <-lines:
+			got += l
+		case <-timeout:
+			t.Fatalf("sse events: %s", got)
+		}
+	}
+	resp.Body.Close()
+	// оценка ответа
+	if code := anna.do("POST", "/api/messages/"+msg.ID+"/feedback", map[string]bool{"helpful": true}, nil); code != 200 {
+		t.Fatal("feedback")
+	}
+	if code := anna.do("POST", "/api/messages/unknown/feedback", map[string]bool{"helpful": true}, nil); code != 404 {
+		t.Fatal("feedback 404")
+	}
+	// метрики пользы для руководителя
+	var in app.Insights
+	if code := maria.do("GET", "/api/insights", nil, &in); code != 200 || in.Questions != 2 || in.ActionsSubmitted != 1 || in.HelpfulRate != 100 || in.MentorMinutesSaved == 0 {
+		t.Fatalf("insights: %d %+v", code, in)
+	}
+	if code := anna.do("GET", "/api/insights", nil, nil); code != 403 {
+		t.Fatal("intern insights")
+	}
+}
+
+func TestAccessAutoCompletesPlan(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	maria := e.login("maria")
+	_, act := anna.ask("Запроси доступ к stash")
+	var conf struct{ Action domain.Action }
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf)
+	if conf.Action.Status != domain.ActionSubmitted {
+		t.Fatalf("stash pending: %+v", conf.Action)
+	}
+	var ap struct{ Approvals []app.Approval }
+	maria.do("GET", "/api/approvals", nil, &ap)
+	maria.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil)
+	var p onboarding.Plan
+	anna.do("GET", "/api/plan", nil, &p)
+	if !stepDone(p, "w1-stash") {
+		t.Fatal("stash step must be auto-completed")
+	}
+	// доступ с автоматической выдачей сразу закрывает шаг
+	_, act = anna.ask("добавь меня в канал tech-dep")
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf)
+	if conf.Action.Status != domain.ActionApproved {
+		t.Fatalf("auto granted: %+v", conf.Action)
+	}
+	anna.do("GET", "/api/plan", nil, &p)
+	if !stepDone(p, "w1-tech-dep") || p.Done != 2 {
+		t.Fatalf("plan: done=%d", p.Done)
+	}
+	// отклонение
+	_, act = anna.ask("Запроси доступ к confluence кластера")
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil)
+	maria.do("GET", "/api/approvals", nil, &ap)
+	if code := maria.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": false, "comment": "Сначала команда"}, nil); code != 200 {
+		t.Fatal("reject")
+	}
+	if code := maria.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil); code != 400 {
+		t.Fatal("decide twice")
+	}
+	if code := maria.do("POST", "/api/approvals/other/x", map[string]any{"approve": true}, nil); code != 400 {
+		t.Fatal("bad kind")
+	}
+	// отмена черновика
+	_, act = anna.ask("дай доступ к grafana")
+	var c struct{ Action domain.Action }
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/cancel", nil, &c); code != 200 || c.Action.Status != domain.ActionCancelled {
+		t.Fatal("cancel")
+	}
+	// чужое действие недоступно
+	ivan := e.login("ivan")
+	if code := ivan.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil); code != 404 {
+		t.Fatal("foreign action")
+	}
+	// нельзя редактировать служебные поля
+	_, act = anna.ask("дай доступ к sentry")
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/confirm", map[string]any{"edits": map[string]any{"system": "k8s-prod"}}, nil); code != 400 {
+		t.Fatal("edit system must be rejected")
+	}
+}
+
+func stepDone(p onboarding.Plan, id string) bool {
+	for _, per := range p.Periods {
+		for _, s := range per.Steps {
+			if s.ID == id {
+				return s.Status == domain.StepDone
+			}
+		}
+	}
+	return false
+}
+
+func TestMentorQuestionAndFAQ(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	oleg := e.login("oleg")
+	msg, act := anna.ask("Где посмотреть тестовый стенд поиска?")
+	if act == nil || act.Kind != domain.ActionMentorQuestion {
+		t.Fatalf("escalation: %s", msg.Text)
+	}
+	var conf struct{ Action domain.Action }
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf)
+	if conf.Action.Status != domain.ActionSubmitted || conf.Action.Result["mentor"] != "Олег Кузнецов" {
+		t.Fatalf("question sent: %+v", conf.Action)
+	}
+	var inbox struct{ Questions []domain.Question }
+	oleg.do("GET", "/api/inbox", nil, &inbox)
+	if len(inbox.Questions) != 1 {
+		t.Fatal("inbox")
+	}
+	if code := anna.do("GET", "/api/inbox", nil, nil); code != 403 {
+		t.Fatal("intern inbox")
+	}
+	maria := e.login("maria")
+	if code := maria.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": "x y"}, nil); code != 403 {
+		t.Fatal("foreign mentor answer")
+	}
+	if code := oleg.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": ""}, nil); code != 400 {
+		t.Fatal("empty answer")
+	}
+	if code := oleg.do("POST", "/api/inbox/nope/answer", map[string]any{"answer": "ok"}, nil); code != 404 {
+		t.Fatal("unknown q")
+	}
+	ans := map[string]any{"answer": "Тестовый стенд поиска — search-staging, ссылка в README сервиса", "addToFaq": true}
+	if code := oleg.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", ans, nil); code != 200 {
+		t.Fatal("answer")
+	}
+	if code := oleg.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", ans, nil); code != 400 {
+		t.Fatal("answer twice")
+	}
+	var my struct{ Questions []domain.Question }
+	anna.do("GET", "/api/questions", nil, &my)
+	if my.Questions[0].Status != "answered" {
+		t.Fatal("my questions")
+	}
+	var st chatState
+	anna.do("GET", "/api/messages", nil, &st)
+	last := st.Messages[len(st.Messages)-1]
+	if last.Mode != "mentor" || !strings.Contains(last.Text, "search-staging") {
+		t.Fatalf("answer in chat: %+v", last)
+	}
+	// ответ стал частью базы знаний: следующий стажёр получает его сразу
+	m, act2 := anna.ask("где тестовый стенд поиска")
+	if act2 != nil || !strings.Contains(m.Text, "search-staging") {
+		t.Fatalf("faq reuse: %s", m.Text)
+	}
+	if err := e.app.LoadFAQ(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// команда: наставник видит план своего стажёра
+	var team struct{ Interns []app.InternSummary }
+	oleg.do("GET", "/api/team", nil, &team)
+	if len(team.Interns) != 1 || team.Interns[0].User.ID != "u-anna" {
+		t.Fatalf("team: %+v", team)
+	}
+	if code := anna.do("GET", "/api/team", nil, nil); code != 403 {
+		t.Fatal("intern team")
+	}
+	var ip struct{ Plan onboarding.Plan }
+	if code := oleg.do("GET", "/api/team/u-anna/plan", nil, &ip); code != 200 || ip.Plan.Total == 0 {
+		t.Fatal("intern plan for mentor")
+	}
+	if code := oleg.do("GET", "/api/team/u-ivan/plan", nil, nil); code != 403 {
+		t.Fatal("foreign intern plan")
+	}
+	if code := oleg.do("GET", "/api/team/u-maria/plan", nil, nil); code != 404 {
+		t.Fatal("non-intern plan")
+	}
+	elena := e.login("elena")
+	elena.do("GET", "/api/team", nil, &team)
+	if len(team.Interns) != 1 {
+		t.Fatal("hrbp team")
+	}
+	var in app.Insights
+	oleg.do("GET", "/api/insights", nil, &in)
+	if in.Escalations != 1 || in.MentorAnswers != 1 || len(in.ByDay) == 0 {
+		t.Fatalf("insights: %+v", in)
+	}
+}
+
+func TestPlanSteps(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	oleg := e.login("oleg")
+	var p onboarding.Plan
+	if code := anna.do("PATCH", "/api/plan/steps/w1-team", map[string]any{"status": "done"}, &p); code != 200 || p.Done != 1 {
+		t.Fatalf("intern step: %d", code)
+	}
+	if code := anna.do("PATCH", "/api/plan/steps/w1-mentor-1on1", map[string]any{"status": "done"}, nil); code != 400 {
+		t.Fatal("mentor step by intern")
+	}
+	if code := oleg.do("PATCH", "/api/plan/steps/w1-mentor-1on1", map[string]any{"status": "done", "internId": "u-anna"}, &p); code != 200 || p.Done != 2 {
+		t.Fatal("mentor step by mentor")
+	}
+	if code := oleg.do("PATCH", "/api/plan/steps/w1-team", map[string]any{"status": "done", "internId": "u-ivan"}, nil); code != 403 {
+		t.Fatal("foreign intern")
+	}
+	if code := anna.do("PATCH", "/api/plan/steps/w1-team", map[string]any{"status": "weird"}, nil); code != 400 {
+		t.Fatal("bad status")
+	}
+	if code := anna.do("PATCH", "/api/plan/steps/nope", map[string]any{"status": "done"}, nil); code != 404 {
+		t.Fatal("unknown step")
+	}
+	if code := anna.do("PATCH", "/api/plan/steps/w1-team", map[string]any{"status": "done", "internId": "ghost"}, nil); code != 404 {
+		t.Fatal("unknown intern")
+	}
+	if code := anna.do("PATCH", "/api/plan/steps/w1-team", map[string]any{"status": "done", "note": strings.Repeat("я", 501)}, nil); code != 400 {
+		t.Fatal("long note")
+	}
+	if m, _ := anna.ask("что мне делать дальше?"); !strings.Contains(m.Text, "Выполнено 2") {
+		t.Fatalf("plan in chat: %s", m.Text)
+	}
+}
+
+func TestAuthAndValidation(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	hc := &http.Client{}
+	get := func(path string) int {
+		resp, _ := hc.Get(e.ts.URL + path)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if get("/api/health") != 200 || get("/api/config") != 200 || get("/api/me") != 401 || get("/api/nope") != 404 || get("/metrics") != 200 {
+		t.Fatal("public endpoints")
+	}
+	if get("/api/ready") != 200 {
+		t.Fatal("ready")
+	}
+	if get("/") != 404 {
+		t.Fatal("no web dir")
+	}
+	// CSRF: без заголовка изменяющий запрос отклоняется
+	resp, _ := hc.Post(e.ts.URL+"/api/auth/login", "application/json", strings.NewReader(`{"login":"anna","password":"buddy2026"}`))
+	if resp.StatusCode != 403 {
+		t.Fatalf("csrf: %d", resp.StatusCode)
+	}
+	jar, _ := cookiejar.New(nil)
+	c := &client{t: t, e: e, hc: &http.Client{Jar: jar}}
+	if code := c.do("POST", "/api/auth/login", map[string]string{"login": "anna", "password": "wrong"}, nil); code != 401 {
+		t.Fatal("wrong password")
+	}
+	if code := c.do("POST", "/api/auth/login", "not-an-object", nil); code != 400 {
+		t.Fatal("bad json")
+	}
+	var du struct{ Users []domain.User }
+	c.do("GET", "/api/auth/demo-users", nil, &du)
+	if len(du.Users) != 7 {
+		t.Fatal("demo users")
+	}
+	anna := e.login("anna")
+	var me struct{ User domain.User }
+	anna.do("GET", "/api/me", nil, &me)
+	if me.User.Name != "Анна Смирнова" {
+		t.Fatal("me")
+	}
+	if code := anna.do("POST", "/api/messages", map[string]string{"text": "  "}, nil); code != 400 {
+		t.Fatal("empty message")
+	}
+	if code := anna.do("POST", "/api/messages", map[string]string{"text": strings.Repeat("а", 2001)}, nil); code != 400 {
+		t.Fatal("long message")
+	}
+	var docs struct{ Docs []map[string]any }
+	anna.do("GET", "/api/kb", nil, &docs)
+	for _, d := range docs.Docs {
+		if d["id"] == "mentor-guide" {
+			t.Fatal("kb list leak")
+		}
+	}
+	if code := anna.do("GET", "/api/kb/mentor-guide", nil, nil); code != 404 {
+		t.Fatal("kb get leak")
+	}
+	if code := anna.do("GET", "/api/kb/process-day-off", nil, nil); code != 200 {
+		t.Fatal("kb get")
+	}
+	anna.do("POST", "/api/auth/logout", nil, nil)
+	if code := anna.do("GET", "/api/me", nil, nil); code != 401 {
+		t.Fatal("logout")
+	}
+	// поддельная cookie
+	req, _ := http.NewRequest("GET", e.ts.URL+"/api/me", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: "forged"})
+	r2, _ := hc.Do(req)
+	if r2.StatusCode != 401 {
+		t.Fatal("forged cookie")
+	}
+}
+
+func TestRateLimitAndFlags(t *testing.T) {
+	off := allOn()
+	off.AbsenceActions, off.MentorEscalation, off.AccessActions = false, false, false
+	e := newTestEnv(t, off, "")
+	anna := e.login("anna")
+	m, act := anna.ask("отгул в пятницу")
+	if act != nil || !strings.Contains(m.Text, "отключено") {
+		t.Fatalf("flag off: %s", m.Text)
+	}
+	// лимит сообщений
+	limited := false
+	for i := 0; i < 40; i++ {
+		if code := anna.do("POST", "/api/messages", map[string]string{"text": "привет"}, nil); code == 429 {
+			limited = true
+			break
+		}
+	}
+	e.app.Wait()
+	if !limited {
+		t.Fatal("rate limit")
+	}
+	// действие, созданное до отключения флага, не выполняется
+	ctx := context.Background()
+	for _, k := range []domain.ActionKind{domain.ActionAbsence, domain.ActionMentorQuestion} {
+		a := domain.Action{ID: "act-" + string(k), UserID: "u-anna", Kind: k, Status: domain.ActionProposed, Args: map[string]any{"question": "вопрос про стенд"}}
+		_ = e.st.SaveAction(ctx, a)
+		if code := anna.do("POST", "/api/actions/"+a.ID+"/confirm", nil, nil); code != 409 {
+			t.Fatalf("%s disabled: %d", k, code)
+		}
+	}
+}
+
+func TestCorpOutage(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	maria := e.login("maria")
+	_, act := anna.ask("отгул в пятницу")
+	e.corp.SetOutage(true)
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil); code != 503 {
+		t.Fatalf("outage confirm: %d", code)
+	}
+	var a struct{ Actions []domain.Action }
+	anna.do("GET", "/api/actions", nil, &a)
+	if a.Actions[0].Status != domain.ActionProposed {
+		t.Fatal("draft must survive outage")
+	}
+	if code := maria.do("GET", "/api/approvals", nil, nil); code != 503 {
+		t.Fatal("approvals outage")
+	}
+	if code := maria.do("POST", "/api/approvals/absence/x", map[string]any{"approve": true}, nil); code != 503 {
+		t.Fatal("decide outage")
+	}
+	if m, _ := anna.ask("дай доступ к stash"); !strings.Contains(m.Text, "не отвечает") {
+		t.Fatalf("chat outage: %s", m.Text)
+	}
+	var ready map[string]string
+	(&client{t: t, e: e, hc: &http.Client{}}).do("GET", "/api/ready", nil, &ready)
+	if ready["corp"] != "outage" {
+		t.Fatalf("ready: %v", ready)
+	}
+	e.corp.SetOutage(false)
+	var conf struct{ Action domain.Action }
+	if code := anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf); code != 200 || conf.Action.Status != domain.ActionSubmitted {
+		t.Fatal("retry after outage")
+	}
+	// правила изменились к моменту подтверждения (прошла неделя) — действие не выполнено, причина сохранена
+	_, act = anna.ask("отгул 12.11")
+	e.clock = e.clock.AddDate(0, 0, 7)
+	anna = e.login("anna") // сессия истекла за неделю
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf)
+	if conf.Action.Status != domain.ActionFailed || conf.Action.Error == "" {
+		t.Fatalf("failed: %+v", conf.Action)
+	}
+	// неподходящий руководитель (чужая команда) получает отказ сервиса
+	sergey := e.login("sergey")
+	if code := sergey.do("POST", "/api/approvals/absence/"+conf.Action.ExternalID, map[string]any{"approve": true}, nil); code != 400 && code != 403 {
+		t.Fatalf("foreign lead decide: %d", code)
+	}
+}
+
+func TestStaticSPA(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "assets"), 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>buddy</html>"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log(1)"), 0o644)
+	e := newTestEnv(t, allOn(), dir)
+	for path, want := range map[string]string{"/": "buddy", "/plan": "buddy", "/assets/app.js": "console"} {
+		resp, _ := http.Get(e.ts.URL + path)
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("%s: %s", path, b)
+		}
+		if resp.Header.Get("Content-Security-Policy") == "" {
+			t.Fatal("csp")
+		}
+	}
+	e2 := newTestEnv(t, allOn(), t.TempDir())
+	if resp, _ := http.Get(e2.ts.URL + "/x"); resp.StatusCode != 404 {
+		t.Fatal("no index")
+	}
+}
+
+func TestAbsenceTitleInApprovals(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	maria := e.login("maria")
+	for _, q := range []string{"отгул 12.11", "отгул с 16 по 17 ноября"} {
+		_, act := anna.ask(q)
+		anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil)
+	}
+	var ap struct{ Approvals []app.Approval }
+	maria.do("GET", "/api/approvals", nil, &ap)
+	titles := ap.Approvals[0].Title + "|" + ap.Approvals[1].Title
+	if !strings.Contains(titles, "Отгул на 12.11 (чт), 1 раб. день") || !strings.Contains(titles, "Отгул 16.11 (пн)–17.11 (вт), 2 раб. дня") {
+		t.Fatalf("titles: %s", titles)
+	}
+}
