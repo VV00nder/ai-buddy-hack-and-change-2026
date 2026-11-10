@@ -1,0 +1,81 @@
+# Архитектура
+
+```mermaid
+flowchart LR
+  subgraph Browser["Браузер стажёра / наставника / руководителя"]
+    UI["React + TS<br/>TanStack Query · Zustand · Zod"]
+  end
+  subgraph Buddy["buddy (Go)"]
+    API["HTTP API + SSE"]
+    APP["Сервисный слой<br/>сессии · действия · план · вопросы · метрики"]
+    AG["Агент<br/>LLM-режим / офлайн-режим"]
+    KB["База знаний<br/>BM25 + права"]
+    MCPc["MCP-клиент"]
+  end
+  subgraph Corp["Корпоративные сервисы (имитация)"]
+    SSO["mock-SSO"]
+    MCPs["MCP-сервер<br/>справочник · отсутствия · доступы"]
+  end
+  PG[(PostgreSQL)]
+  RD[(Redis)]
+  LLM["OpenAI-совместимая LLM<br/>(опционально)"]
+
+  UI -- "REST, cookie-сессия" --> API
+  API -- "SSE: шаги агента, статусы" --> UI
+  API --> APP --> AG
+  AG --> KB
+  AG --> MCPc
+  APP --> MCPc
+  MCPc -- "JSON-RPC, токен пользователя" --> MCPs
+  APP -- "логин" --> SSO
+  AG -. "tool calling" .-> LLM
+  APP --> PG
+  APP --> RD
+```
+
+## Поток «вопрос → результат»
+```mermaid
+sequenceDiagram
+  participant S as Стажёр
+  participant UI as Интерфейс
+  participant B as buddy
+  participant A as Агент
+  participant C as Сервис отсутствий (MCP)
+  participant L as Руководитель
+  S->>UI: «Оформи отгул в пятницу»
+  UI->>B: POST /api/messages
+  B-->>UI: 202 (ответ готовится)
+  B->>A: обработка в фоне
+  A-->>UI: SSE: «Проверяю заявку в системе отсутствий»
+  A->>C: tools/call absence_create(dry_run=true)
+  C-->>A: правила соблюдены, согласует Мария
+  A-->>UI: SSE: ответ + черновик заявки
+  S->>UI: «Отправить заявку»
+  UI->>B: POST /api/actions/{id}/confirm
+  B->>C: tools/call absence_create
+  C-->>B: ABS-1001, pending
+  B-->>L: уведомление «ждёт решения»
+  L->>B: Согласовать с комментарием
+  B->>C: absence_decide (токен руководителя)
+  B-->>UI: SSE: статус «Согласовано», уведомление стажёру
+```
+
+## Структура репозитория
+```
+backend/
+  cmd/buddy          — сервис AI-buddy
+  cmd/corpmock       — имитация корпоративных сервисов (MCP + SSO)
+  internal/agent     — агент: LLM-режим, офлайн-режим, промпт
+  internal/api       — HTTP API, SSE, статика, e2e-тесты API
+  internal/app       — сервисный слой
+  internal/corp      — правила и данные имитаций, MCP-инструменты
+  internal/knowledge — база знаний (docs/*.md) и поиск
+  internal/onboarding— шаблон плана по чек-листу Авито
+  internal/mcp       — MCP: сервер и клиент
+  internal/store     — PostgreSQL / память, миграции
+  internal/kv        — Redis / память: сессии, rate limit
+  internal/llm       — клиент OpenAI-совместимого API
+web/                 — интерфейс (React + TS)
+specs/, .specify/    — SDD-спецификации
+e2e/demo.mjs         — сквозной сценарий и запись видео
+```
