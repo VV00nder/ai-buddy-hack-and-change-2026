@@ -1,0 +1,180 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { App, Root } from '../App';
+import type { Action } from '../api/schemas';
+import { keys, makeQueryClient } from '../hooks/queries';
+import { uiStore, useUi, type View } from '../store/ui';
+import { absence, anna, insights, maria, msgs, oleg, plan } from '../test-fixtures';
+import { ActionCard, editableFields, facts } from './ActionCard';
+import { ApprovalRow, Approvals } from './Approvals';
+import { Bubble, Chat } from './Chat';
+import { AnswerForm, Inbox } from './Inbox';
+import { Insights, InsightsBody } from './Insights';
+import { Knowledge } from './Knowledge';
+import { Login } from './Login';
+import { PlanBody, PlanView } from './PlanView';
+import { Requests } from './Requests';
+import { Shell } from './Shell';
+import { Team } from './Team';
+import { TodayPanel } from './TodayPanel';
+
+// В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
+uiStore.getInitialState = uiStore.getState;
+
+function seeded() {
+  const qc = makeQueryClient();
+  qc.setQueryData(keys.me, { user: anna });
+  qc.setQueryData(keys.config, { mode: 'offline', flags: { absenceActions: true, accessActions: true, mentorEscalation: true, faqFromAnswers: true, llm: true } });
+  qc.setQueryData(keys.chat, { messages: msgs, actions: [absence] });
+  qc.setQueryData(keys.plan, plan);
+  qc.setQueryData(keys.notifications, { notifications: [{ id: 'n1', kind: 'action', text: 'Заявка отправлена', read: false, createdAt: '2026-11-10T12:00:00Z' }] });
+  qc.setQueryData(keys.insights, insights);
+  qc.setQueryData(keys.approvals, {
+    approvals: [{ kind: 'absence', externalId: 'ABS-1', userId: 'u-anna', userName: 'Анна Смирнова', title: 'Отгул 13.11', details: { reason: 'учёба' } }],
+  });
+  qc.setQueryData(keys.inbox, {
+    questions: [
+      { id: 'q1', internId: 'u-anna', mentorId: 'u-oleg', text: 'Где стенд?', status: 'open', createdAt: '2026-11-10T12:00:00Z' },
+      { id: 'q2', internId: 'u-anna', mentorId: 'u-oleg', text: 'Где логи?', answer: 'В Observer', addToFaq: true, status: 'answered', createdAt: '2026-11-10T12:00:00Z' },
+    ],
+  });
+  qc.setQueryData(keys.team, { interns: [{ user: anna, day: 4, percent: 33, done: 1, total: 3, overdue: 1, nextStep: 'Stash', openQuestions: 1 }] });
+  qc.setQueryData(keys.internPlan('u-anna'), { plan, intern: anna });
+  qc.setQueryData(keys.docs, { docs: [{ id: 'process-day-off', title: 'Как оформить отгул', tags: [] }] });
+  qc.setQueryData(keys.doc('process-day-off'), { id: 'process-day-off', title: 'Как оформить отгул', tags: [], sections: [{ heading: 'Отгул', text: '- шаг' }] });
+  qc.setQueryData(['demo-users'], { users: [anna, maria], password: 'buddy2026' });
+  return qc;
+}
+
+function html(node: ReactNode, qc = seeded()) {
+  return renderToStaticMarkup(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
+}
+
+test('chat renders history, sources, action card and pending trace', () => {
+  useUi.getState().go('chat');
+  const out = html(<Chat user={anna} />);
+  assert.match(out, /Хочу отгул в пятницу/);
+  assert.match(out, /<strong>всё в порядке<\/strong>/);
+  assert.match(out, /Как оформить отгул — Отгул/);
+  assert.match(out, /Отправить заявку/);
+  assert.match(out, /Ищу в базе знаний/);
+  assert.match(out, /офлайн-агент/);
+  const empty = seeded();
+  empty.setQueryData(keys.chat, { messages: [], actions: [] });
+  assert.match(html(<Chat user={anna} />, empty), /Привет, Анна/);
+  assert.match(html(<Chat user={maria} />, empty), /Zero Bug Policy/);
+  const fresh = makeQueryClient();
+  assert.match(html(<Chat user={anna} />, fresh), /Загружаю историю/);
+});
+
+test('bubble variants', () => {
+  const qc = seeded();
+  const err = { ...msgs[1]!, status: 'error' as const, mode: 'mentor', sources: [], actionId: undefined };
+  const out = html(<Bubble m={err} onSuggest={() => undefined} isLast={false} />, qc);
+  assert.match(out, /failed/);
+  assert.match(out, /from-mentor/);
+  assert.doesNotMatch(out, /Помогло/);
+  const rated = html(<Bubble m={{ ...msgs[1]!, feedback: true }} onSuggest={() => undefined} isLast />, qc);
+  assert.match(rated, /aria-pressed="true"/);
+  assert.match(rated, /Статус моих заявок/);
+});
+
+test('action card states', () => {
+  const states: Partial<Action>[] = [
+    {},
+    { status: 'submitted', externalId: 'ABS-1', args: { date_from: '2026-11-13', date_to: '2026-11-16' } },
+    { status: 'approved', result: { comment: 'Хорошего отдыха' } },
+    { status: 'failed', error: 'Слишком поздно' },
+    { kind: 'access', title: 'Stash', args: { system: 'stash', level: 'write' }, preview: { level: 'write', expected: 'Согласует Мария', approval: 'lead' } },
+    { kind: 'access', title: 'VPN', status: 'approved', preview: { approval: 'auto', level: 'user' }, result: { comment: 'ok' }, externalId: 'ACC-1' },
+    { kind: 'mentor_question', title: 'Вопрос наставнику', args: { question: 'Где стенд?' }, preview: {} },
+    { kind: 'mentor_question', title: 'Вопрос наставнику', status: 'approved', result: { mentor: 'Олег', answer: 'search-staging' } },
+  ];
+  const outs = states.map((s) => html(<ActionCard action={{ ...absence, ...s } as Action} />));
+  assert.match(outs[0]!, /Останется отгулов/);
+  assert.match(outs[1]!, /На согласовании/);
+  assert.match(outs[1]!, /13 ноября — 16 ноября/);
+  assert.match(outs[2]!, /Хорошего отдыха/);
+  assert.match(outs[3]!, /Слишком поздно/);
+  assert.match(outs[4]!, /Для какой задачи/);
+  assert.match(outs[5]!, /Выдан/);
+  assert.match(outs[6]!, /Отправить наставнику/);
+  assert.match(outs[7]!, /search-staging/);
+  assert.equal(editableFields({ ...absence, kind: 'access', preview: { approval: 'auto' } }).length, 0);
+  assert.deepEqual(facts({ ...absence, preview: {}, args: {}, kind: 'access' })[0], ['Уровень', '']);
+});
+
+test('plan and today panel', () => {
+  const out = html(<PlanBody plan={plan} />);
+  assert.match(out, /День 4/);
+  assert.match(out, /следующий/);
+  assert.match(out, /делает наставник/);
+  assert.match(out, /просрочен с 6 ноября/);
+  assert.match(out, /Нужна помощь/);
+  assert.match(out, /Спросить buddy/);
+  assert.match(html(<PlanBody plan={plan} internId="u-anna" internName="Анна Смирнова" />), /План стажёра/);
+  assert.match(html(<PlanView />), /1 неделя/);
+  assert.match(html(<PlanView internId="u-anna" />), /Анна Смирнова/);
+  assert.match(html(<PlanView />, makeQueryClient()), /Загружаю план/);
+  const today = html(<TodayPanel />);
+  assert.match(today, /день стажировки/);
+  assert.match(today, /просрочено 1/);
+  assert.match(today, /Запроси доступ к Stash/);
+  assert.match(html(<TodayPanel />, makeQueryClient()), /aria-busy="true"/);
+});
+
+test('mentor and lead screens', () => {
+  assert.match(html(<Inbox />), /Где стенд\?/);
+  assert.match(html(<Inbox />), /в базе знаний/);
+  assert.match(html(<AnswerForm q={{ id: 'q', internId: 'u', mentorId: 'm', text: 'Вопрос?', status: 'open', createdAt: '' }} who="Анна" />), /Сохранить в базу знаний/);
+  const noQ = seeded();
+  noQ.setQueryData(keys.inbox, { questions: [] });
+  assert.match(html(<Inbox />, noQ), /Новых вопросов нет/);
+  assert.match(html(<Approvals />), /Отгул 13.11/);
+  assert.match(html(<ApprovalRow a={{ kind: 'access', externalId: 'A', userId: 'u', userName: 'Анна', title: 'Доступ', details: { justification: 'для задачи' } }} />), /для задачи/);
+  const noA = seeded();
+  noA.setQueryData(keys.approvals, { approvals: [] });
+  assert.match(html(<Approvals />, noA), /Нечего согласовывать/);
+  useUi.getState().go('team');
+  assert.match(html(<Team />), /1 без ответа/);
+  useUi.getState().go('team', { internId: 'u-anna' });
+  assert.match(html(<Team />), /Все стажёры/);
+  useUi.getState().go('team');
+  const noT = seeded();
+  noT.setQueryData(keys.team, { interns: [] });
+  assert.match(html(<Team />, noT), /нет стажёров/);
+  const ins = html(<InsightsBody d={insights} />);
+  assert.match(ins, /2,3 ч/);
+  assert.match(ins, /0,4 с/);
+  assert.match(html(<InsightsBody d={{ ...insights, avgAnswerSeconds: 0.02 }} />), /меньше 0,1 с/);
+  assert.match(html(<InsightsBody d={{ ...insights, avgAnswerSeconds: 1.5 }} />), /1,5 с/);
+  assert.match(ins, /90%/);
+  assert.match(html(<InsightsBody d={{ ...insights, feedbacks: 0, byDay: [] }} />), /нет оценок/);
+  assert.match(html(<Insights />), /контрольной группой/);
+});
+
+test('requests, knowledge, login, shell and app', () => {
+  assert.match(html(<Requests />), /Отгул на 13.11/);
+  const noR = seeded();
+  noR.setQueryData(keys.chat, { messages: [], actions: [] });
+  assert.match(html(<Requests />, noR), /Заявок пока нет/);
+  useUi.getState().go('knowledge');
+  assert.match(html(<Knowledge />), /Выбери инструкцию/);
+  useUi.getState().go('knowledge', { docId: 'process-day-off' });
+  const kb = html(<Knowledge />);
+  assert.match(kb, /не регламент Авито/);
+  assert.match(kb, /<li>шаг<\/li>/);
+  assert.match(html(<Login onDone={() => undefined} />), /Анна Смирнова/);
+  const views: View[] = ['chat', 'plan', 'requests', 'knowledge', 'inbox', 'approvals', 'team', 'insights'];
+  for (const v of views) {
+    useUi.getState().go(v);
+    assert.match(html(<Shell user={v === 'inbox' ? oleg : v === 'approvals' ? maria : anna} />), /buddy/);
+  }
+  useUi.getState().go('chat');
+  assert.match(html(<Root />), /Анна Смирнова/);
+  assert.match(html(<App client={seeded()} />), /Мой план/);
+  assert.match(html(<Root />, makeQueryClient()), /загружается/);
+});

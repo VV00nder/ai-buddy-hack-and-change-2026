@@ -1,0 +1,32 @@
+{
+  "name": "ai-buddy-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Веб-интерфейс AI-buddy: React + TypeScript + TanStack Query + Zustand + Zod",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-reporter=spec \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
+    "coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-exclude=\"src/**/*.test.*\" --test-coverage-exclude=\"src/main.tsx\" --test-coverage-exclude=\"src/test-fixtures.ts\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"src/**/*.test.ts\" \"src/**/*.test.tsx\""
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.107.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "3.25.76",
+    "zustand": "5.0.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
