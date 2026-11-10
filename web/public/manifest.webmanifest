@@ -1,0 +1,22 @@
+{
+  "name": "AI-buddy — помощник стажёра",
+  "short_name": "AI-buddy",
+  "description": "Ответы по инструкциям команды, план адаптации и заявки через корпоративные сервисы",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#6f45d8",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Мой план", "url": "/?view=plan" },
+    { "name": "Заявки", "url": "/?view=requests" }
+  ]
+}

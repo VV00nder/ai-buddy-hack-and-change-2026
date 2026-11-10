@@ -113,6 +113,8 @@ textarea { resize: vertical; }
 .content { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; }
 .view-chat .content { padding: 0; overflow: hidden; }
 .bell { margin-left: auto; position: relative; }
+.install { margin-left: auto; }
+.install + .bell { margin-left: 0; }
 .bell-btn { position: relative; border: 0; background: none; cursor: pointer; padding: 6px; border-radius: 50%; display: grid; }
 .bell-btn:hover { background: var(--surface); }
 .badge { position: absolute; top: 0; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--alert); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
@@ -296,7 +298,8 @@ textarea { resize: vertical; }
   .login-panel { padding: 24px 16px 40px; }
   .manual { grid-template-columns: 1fr; }
   .shell, .shell:not(.view-chat) { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-  .rail { order: 2; flex-direction: row; padding: 6px; border-right: 0; border-top: 1px solid var(--line); gap: 0; }
+  .rail { order: 2; flex-direction: row; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; }
+  .install { font-size: 12px; padding: 5px 8px; }
   .rail .brand, .rail .me { display: none; }
   .rail ul { display: flex; width: 100%; overflow-x: auto; }
   .rail li { flex: 1 0 auto; }

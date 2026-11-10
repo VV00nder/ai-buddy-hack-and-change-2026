@@ -71,7 +71,7 @@ await loginAs('Анна Смирнова');
 await caption('Справа — план адаптации по чек-листу Авито: день, этап и следующий шаг');
 await caption('Сценарий из кейса: стажёру нужен отгул, но он не знает порядок и стоит ли отвлекать руководителя', 2400);
 await page.getByRole('button', { name: /Мне нужен отгул/ }).click();
-await page.locator('.bubble.assistant.pending').waitFor({ state: 'detached' });
+await page.locator('.bubble.assistant:not(.pending) .source').first().waitFor({ timeout: 30000 });
 await pause(800);
 check('ответ о порядке оформления со ссылкой на инструкцию', (await lastAssistant().locator('.source').count()) > 0);
 await caption('Ответ из инструкции команды с источником. Руководителя отвлекать не нужно — заявка уйдёт ему сама', 3000);

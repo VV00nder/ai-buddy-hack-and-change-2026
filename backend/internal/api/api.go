@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +20,10 @@ import (
 	"aibuddy/internal/knowledge"
 	"aibuddy/internal/kv"
 )
+
+func init() {
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}
 
 // CookieName — имя cookie сессии.
 const CookieName = "buddy_session"
@@ -508,8 +513,13 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	clean := filepath.Clean("/" + r.URL.Path)
 	p := filepath.Join(s.webDir, clean)
 	if st, err := os.Stat(p); err == nil && !st.IsDir() {
-		if strings.HasPrefix(clean, "/assets/") {
+		switch {
+		case strings.HasPrefix(clean, "/assets/"):
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case clean == "/sw.js" || clean == "/manifest.webmanifest":
+			// service worker и манифест всегда проверяются заново — иначе обновления не дойдут
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Service-Worker-Allowed", "/")
 		}
 		http.ServeFile(w, r, p)
 		return

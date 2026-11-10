@@ -1,5 +1,5 @@
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError } from './api/client';
 import { Login } from './components/Login';
 import { Shell } from './components/Shell';
@@ -17,6 +17,13 @@ export function App({ client }: { client?: ReturnType<typeof makeQueryClient> })
 export function Root() {
   const me = useMe();
   const qc = useQueryClient();
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  useEffect(() => {
+    // связь вернулась — перезагружаем данные
+    const onOnline = () => void qc.invalidateQueries();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [qc]);
   if (me.isPending) return <div className="boot" aria-busy="true">AI-buddy загружается…</div>;
   if (me.error instanceof ApiError && me.error.status === 401) {
     return <Login onDone={(user) => qc.setQueryData(keys.me, { user })} />;
@@ -24,7 +31,7 @@ export function Root() {
   if (me.error || !me.data) {
     return (
       <div className="boot">
-        <p>Сервер AI-buddy не отвечает.</p>
+        <p>{offline ? 'Нет подключения к сети. AI-buddy обновится сам, когда связь появится.' : 'Сервер AI-buddy не отвечает.'}</p>
         <button className="btn" onClick={() => void me.refetch()}>Повторить</button>
       </div>
     );

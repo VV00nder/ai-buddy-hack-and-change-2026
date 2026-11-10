@@ -5,6 +5,7 @@ import type { User } from '../api/schemas';
 import { useLiveUpdates, useNotifications, keys } from '../hooks/queries';
 import { initials, relative, roleName } from '../lib/format';
 import { useUi, type View } from '../store/ui';
+import { useInstallPrompt, viewFromSearch } from '../pwa';
 import { Approvals } from './Approvals';
 import { Chat } from './Chat';
 import { Inbox } from './Inbox';
@@ -53,7 +54,9 @@ export function Shell({ user }: { user: User }) {
   useEffect(() => {
     if (first.current) {
       first.current = false;
-      if (user.role !== 'intern' && view === 'chat') go(nav[0]!.view);
+      const fromShortcut = viewFromSearch(window.location.search);
+      if (fromShortcut && nav.some((n) => n.view === fromShortcut)) go(fromShortcut);
+      else if (user.role !== 'intern' && view === 'chat') go(nav[0]!.view);
     }
   }, [user.role, view, go, nav]);
 
@@ -93,6 +96,7 @@ export function Shell({ user }: { user: User }) {
         <header className="topbar">
           <h1 className="view-title">{nav.find((n) => n.view === view)?.label ?? 'План стажёра'}</h1>
           {!online && <span className="offline" role="status">Нет живого соединения — обновляю данные опросом</span>}
+          <InstallButton />
           <Bell />
         </header>
         <div className="content">
@@ -115,6 +119,16 @@ export function Shell({ user }: { user: User }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function InstallButton() {
+  const { canInstall, install } = useInstallPrompt();
+  if (!canInstall) return null;
+  return (
+    <button className="btn ghost small install" onClick={() => void install()}>
+      Установить приложение
+    </button>
   );
 }
 

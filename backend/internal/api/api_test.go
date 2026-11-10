@@ -593,6 +593,8 @@ func TestStaticSPA(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(dir, "assets"), 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>buddy</html>"), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log(1)"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "sw.js"), []byte("self.x=1"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "manifest.webmanifest"), []byte(`{"name":"AI-buddy"}`), 0o644)
 	e := newTestEnv(t, allOn(), dir)
 	for path, want := range map[string]string{"/": "buddy", "/plan": "buddy", "/assets/app.js": "console"} {
 		resp, _ := http.Get(e.ts.URL + path)
@@ -604,6 +606,18 @@ func TestStaticSPA(t *testing.T) {
 		if resp.Header.Get("Content-Security-Policy") == "" {
 			t.Fatal("csp")
 		}
+	}
+	resp, _ := http.Get(e.ts.URL + "/manifest.webmanifest")
+	if resp.Header.Get("Content-Type") != "application/manifest+json" || resp.Header.Get("Cache-Control") != "no-cache" {
+		t.Fatalf("manifest headers: %v", resp.Header)
+	}
+	resp, _ = http.Get(e.ts.URL + "/sw.js")
+	if resp.Header.Get("Cache-Control") != "no-cache" || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
+		t.Fatalf("sw headers: %v", resp.Header)
+	}
+	resp, _ = http.Get(e.ts.URL + "/assets/app.js")
+	if !strings.Contains(resp.Header.Get("Cache-Control"), "immutable") {
+		t.Fatal("assets cache")
 	}
 	e2 := newTestEnv(t, allOn(), t.TempDir())
 	if resp, _ := http.Get(e2.ts.URL + "/x"); resp.StatusCode != 404 {

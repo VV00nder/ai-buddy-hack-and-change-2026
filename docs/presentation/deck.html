@@ -136,8 +136,8 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <div class="note pink tilt-r"><h3>4. Без наставника</h3><p class="small">Похожий вопрос закрывается сразу с пометкой «ответ наставника команды»</p></div>
   </div>
   <div class="row" style="align-items:flex-start">
-    <img class="shot" src="img/inbox.png" style="width:700px">
-    <img class="shot" src="img/after.png" style="width:700px">
+    <img class="shot" src="img/inbox.png" style="width:560px">
+    <img class="shot" src="img/after.png" style="width:560px">
   </div>
   <span class="num">7</span>
 </section>
@@ -173,7 +173,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
   <h2>Архитектура на стеке Авито</h2>
   <div class="row" style="flex:1">
     <div class="col grow" style="justify-content:center; gap:14px">
-      <div class="note violet"><h3>Веб-интерфейс</h3><p class="small">React 19 · TypeScript · TanStack Query · Zustand · Zod</p></div>
+      <div class="note violet"><h3>Веб и приложение на телефоне (PWA)</h3><p class="small">React 19 · TypeScript · TanStack Query · Zustand · Zod</p></div>
       <p class="arrow" style="align-self:center">↕ REST + SSE</p>
       <div class="note blue"><h3>buddy — Go</h3><p class="small">сессии · агент (LLM / офлайн) · план · заявки · вопросы · метрики</p></div>
       <div class="row" style="gap:14px">
@@ -188,6 +188,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
         <li><b>MCP</b> — граница с сервисами: новые системы подключаются регистрацией сервера</li>
         <li><b>Асинхронный ответ:</b> 202 сразу, шаги агента по SSE; интерфейс не ждёт модель</li>
         <li><b>Два режима агента</b> с одинаковыми инструментами: LLM (OpenAI-совместимый API) и офлайн, он же резерв при сбое</li>
+        <li><b>Не привязан к каналу:</b> веб и PWA — клиенты одного API; бот корпоративного мессенджера подключается так же. Данные не уходят во внешние мессенджеры</li>
         <li><b>Docker Compose:</b> весь стенд одной командой</li>
       </ul>
     </div>
@@ -226,8 +227,8 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 <section class="slide">
   <h2>Качество: спецификации, тесты, запуск одной командой</h2>
   <div class="row">
-    <div class="note violet tilt-l" style="width:330px"><p class="kpi">94,7%</p><p class="small">покрытие строк бэкенда (Go), 46 тестов</p></div>
-    <div class="note blue tilt-r" style="width:330px"><p class="kpi">91,2%</p><p class="small">покрытие фронтенда (React/TS), 15 тестов</p></div>
+    <div class="note violet tilt-l" style="width:330px"><p class="kpi">94,8%</p><p class="small">покрытие строк бэкенда (Go), 46 тестов</p></div>
+    <div class="note blue tilt-r" style="width:330px"><p class="kpi">90,4%</p><p class="small">покрытие фронтенда (React/TS), 19 тестов</p></div>
     <div class="note green tilt-l" style="width:330px"><p class="kpi">12/12</p><p class="small">проверок e2e-сценария по трём ролям в Playwright</p></div>
   </div>
   <ul class="clean">
@@ -266,7 +267,8 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
   <div class="row" style="align-items:flex-start">
     <div class="note blue tilt-l grow"><h3>Источники</h3><p class="small">Confluence команды с правами пространств; новые сервисы через MCP: командировки, бенефиты, согласия</p></div>
     <div class="note violet tilt-r grow"><h3>Проактивность</h3><p class="small">ИИ-крон: напоминания о просроченных шагах, «завтра экватор — вот чек-лист»</p></div>
-    <div class="note green tilt-l grow"><h3>Для наставника</h3><p class="small">Черновик обратной связи по плану, напоминания о 1:1; после онбординга — точка входа для рабочих вопросов</p></div>
+    <div class="note green tilt-l grow"><h3>Каналы</h3><p class="small">Бот в корпоративном мессенджере и push-уведомления PWA — клиенты того же API, агент не меняется</p></div>
+    <div class="note pink tilt-r grow"><h3>Для наставника</h3><p class="small">Черновик обратной связи по плану, напоминания о 1:1; после онбординга — точка входа для рабочих вопросов</p></div>
   </div>
   <div style="margin-top:auto">
     <h1 style="font-size:72px">Спасибо!</h1>
