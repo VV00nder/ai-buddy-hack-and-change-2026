@@ -1,0 +1,10 @@
+node_modules/
+web/dist/
+web/coverage/
+coverage/*.out
+coverage/*.html
+coverage/*.lcov.info
+.env
+*.log
+.DS_Store
+/backend/bin/

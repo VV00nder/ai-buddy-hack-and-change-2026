@@ -1,0 +1,7 @@
+**/node_modules
+web/dist
+web/coverage
+coverage
+.git
+*.log
+.env
