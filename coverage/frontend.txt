@@ -1,0 +1,57 @@
+✔ client validates responses and sends CSRF header (32.257885ms)
+✔ client maps errors (3.477837ms)
+✔ client endpoints (7.273874ms)
+✔ sse subscription (0.633242ms)
+✔ chat renders history, sources, action card and pending trace (31.854191ms)
+✔ bubble variants (1.550077ms)
+✔ action card states (6.292521ms)
+✔ plan and today panel (8.044315ms)
+✔ mentor and lead screens (12.06902ms)
+✔ requests, knowledge, login, shell and app (30.848227ms)
+✔ format helpers (22.106187ms)
+✔ markdown parser (11.849298ms)
+✔ upsert helpers (1.920133ms)
+✔ applyUpdate updates query cache (5.34463ms)
+✔ ui store (0.427243ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6608.974755
+ℹ start of coverage report
+ℹ -------------------------------------------------------------------------------------------------------------------
+ℹ file             | line % | branch % | funcs % | uncovered lines
+ℹ -------------------------------------------------------------------------------------------------------------------
+ℹ src              |        |          |         | 
+ℹ  api             |        |          |         | 
+ℹ   client.ts      | 100.00 |    97.78 |   96.97 | 
+ℹ   schemas.ts     | 100.00 |    81.25 |  100.00 | 
+ℹ   sse.ts         | 100.00 |   100.00 |   85.71 | 
+ℹ  App.tsx         |  72.73 |    69.23 |   83.33 | 23-25 28-33
+ℹ  components      |        |          |         | 
+ℹ   ActionCard.tsx |  95.15 |    95.83 |   61.54 | 67 100-103
+ℹ   Approvals.tsx  |  77.97 |    81.82 |   72.73 | 11-13 16 46-54
+ℹ   Chat.tsx       |  91.93 |    93.88 |   72.73 | 57-59 68-75 126 141
+ℹ   Inbox.tsx      |  86.25 |    66.67 |   86.67 | 17-18 20 66-67 74 76-80
+ℹ   Insights.tsx   |  94.34 |    85.71 |  100.00 | 10-12
+ℹ   Knowledge.tsx  |  97.67 |    91.67 |   66.67 | 27
+ℹ   Login.tsx      |  96.43 |    88.89 |   77.78 | 52-54
+ℹ   PlanView.tsx   |  93.33 |    95.24 |   58.33 | 15 72 91-93 104-105
+ℹ   Requests.tsx   |  96.00 |    80.00 |  100.00 | 13
+ℹ   Shell.tsx      |  81.65 |    88.46 |   53.85 | 65-68 71-72 101-106 126 132-136 148-158
+ℹ   Team.tsx       |  91.53 |    85.71 |   50.00 | 17 22-23 43 47
+ℹ   TodayPanel.tsx |  94.44 |    91.67 |   85.71 | 10-12
+ℹ  hooks           |        |          |         | 
+ℹ   queries.ts     |  74.73 |    85.71 |   68.75 | 67-69 77-79 95-97 100-102 108-111 113-115 118-136 143 145-151 162
+ℹ  lib             |        |          |         | 
+ℹ   format.ts      | 100.00 |   100.00 |  100.00 | 
+ℹ   markdown.tsx   | 100.00 |   100.00 |  100.00 | 
+ℹ  store           |        |          |         | 
+ℹ   ui.ts          | 100.00 |   100.00 |  100.00 | 
+ℹ -------------------------------------------------------------------------------------------------------------------
+ℹ all files        |  91.18 |    91.31 |   79.54 | 
+ℹ -------------------------------------------------------------------------------------------------------------------
+ℹ end of coverage report

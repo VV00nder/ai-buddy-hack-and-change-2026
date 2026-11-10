@@ -1,0 +1,12 @@
+{
+  "name": "ai-buddy-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node demo.mjs",
+    "video": "node demo.mjs --video ../docs/demo"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

@@ -1,0 +1,71 @@
+# AI-buddy: полный стенд одной командой — docker compose up --build
+# Интерфейс: http://localhost:8080
+name: ai-buddy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: buddy
+      POSTGRES_PASSWORD: buddy
+      POSTGRES_DB: buddy
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buddy"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  corp:
+    build: { context: ., target: corpmock }
+    environment:
+      IDENTITY_SECRET: ${IDENTITY_SECRET:-change-me-in-prod}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-buddy2026}
+      CORP_ADMIN_TOKEN: ${CORP_ADMIN_TOKEN:-demo-admin}
+      APP_TZ: ${APP_TZ:-Europe/Moscow}
+    ports: ["8090:8090"]
+
+  buddy:
+    build: { context: ., target: buddy }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      corp: { condition: service_healthy }
+    environment:
+      CORP_URL: http://corp:8090
+      DATABASE_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      APP_TZ: ${APP_TZ:-Europe/Moscow}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
+      FF_LLM: ${FF_LLM:-true}
+      FF_ABSENCE_ACTIONS: ${FF_ABSENCE_ACTIONS:-true}
+      FF_ACCESS_ACTIONS: ${FF_ACCESS_ACTIONS:-true}
+      FF_MENTOR_ESCALATION: ${FF_MENTOR_ESCALATION:-true}
+      FF_FAQ_FROM_ANSWERS: ${FF_FAQ_FROM_ANSWERS:-true}
+    ports: ["8080:8080"]
+
+  # Тесты и отчёт о покрытии: docker compose --profile test run --rm tests
+  tests:
+    profiles: [test]
+    build: { context: ., target: test }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      TEST_DATABASE_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+      TEST_REDIS_URL: redis://redis:6379/1
+    volumes: ["./coverage:/repo/coverage"]
+
+volumes:
+  pgdata:
