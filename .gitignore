@@ -8,3 +8,4 @@ coverage/*.lcov.info
 *.log
 .DS_Store
 /backend/bin/
+*.tmp.mjs
