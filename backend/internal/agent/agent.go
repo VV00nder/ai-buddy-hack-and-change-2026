@@ -11,7 +11,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"aibuddy/internal/domain"
@@ -42,7 +44,8 @@ type Deps struct {
 	KB   *knowledge.Base
 	Corp Corp
 	Plan func(ctx context.Context, u domain.User) (onboarding.Plan, error)
-	LLM  llm.Client // nil — офлайн-режим
+	LLM  llm.Client   // nil — офлайн-режим
+	Log  *slog.Logger // nil — slog.Default()
 	// Goals — цели стажировки пользователя (необязательно).
 	Goals func(ctx context.Context, u domain.User) ([]domain.Goal, error)
 	Now   func() time.Time
@@ -84,7 +87,13 @@ type Reply struct {
 }
 
 // Agent — исполнитель.
-type Agent struct{ d Deps }
+type Agent struct {
+	d Deps
+
+	mu      sync.Mutex
+	lastErr string // последняя ошибка модели — для /api/ready и логов
+	lastAt  time.Time
+}
 
 // New создаёт агента.
 func New(d Deps) *Agent {
@@ -93,6 +102,9 @@ func New(d Deps) *Agent {
 	}
 	if d.MaxSteps == 0 {
 		d.MaxSteps = 6
+	}
+	if d.Log == nil {
+		d.Log = slog.Default()
 	}
 	return &Agent{d: d}
 }
@@ -112,10 +124,12 @@ func (a *Agent) Handle(ctx context.Context, req Request) Reply {
 	}
 	if a.d.LLM != nil {
 		r, err := a.handleLLM(ctx, req)
+		a.noteLLM(err)
 		if err == nil {
 			r.Mode = "llm"
 			return r
 		}
+		a.d.Log.Warn("agent: llm fallback", "err", err.Error())
 		req.Progress(domain.TraceItem{Kind: "fallback", Label: "Модель недоступна — отвечаю в упрощённом режиме", At: a.d.Now()})
 	}
 	r := a.handleOffline(ctx, req)
@@ -188,3 +202,26 @@ func ruDate(iso string) string {
 }
 
 var shortWD = [...]string{"вс", "пн", "вт", "ср", "чт", "пт", "сб"}
+
+func (a *Agent) noteLLM(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err == nil {
+		a.lastErr = ""
+		return
+	}
+	a.lastErr, a.lastAt = err.Error(), a.d.Now()
+}
+
+// LLMStatus — состояние модели: "off" (офлайн-режим), "ok" или текст последней ошибки.
+func (a *Agent) LLMStatus() string {
+	if a.d.LLM == nil {
+		return "off"
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.lastErr == "" {
+		return "ok"
+	}
+	return a.lastErr + " (" + a.lastAt.Format("15:04:05") + ")"
+}

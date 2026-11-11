@@ -330,6 +330,15 @@ func TestLLMToolErrorsAndFallback(t *testing.T) {
 	if r2.Mode != "offline" || len(r2.Sources) == 0 || !strings.Contains(strings.Join(e2.trace, "|"), "упрощённом") {
 		t.Fatalf("fallback: %+v %v", r2, e2.trace)
 	}
+	if st := e2.agent.LLMStatus(); !strings.HasPrefix(st, "timeout (") {
+		t.Fatalf("llm status: %q", st)
+	}
+	if st := e.agent.LLMStatus(); st != "ok" {
+		t.Fatalf("llm status ok: %q", st)
+	}
+	if st := newEnv(t, nil).agent.LLMStatus(); st != "off" {
+		t.Fatalf("llm status off: %q", st)
+	}
 	// пустой ответ модели — тоже резерв
 	empty := &scripted{steps: []llm.Message{{Role: "assistant", Content: "  "}}}
 	if r := newEnv(t, empty).ask("привет"); r.Mode != "offline" {

@@ -154,7 +154,7 @@ func newID(prefix string) string {
 
 // Ready проверяет зависимости.
 func (a *App) Ready(ctx context.Context) map[string]string {
-	out := map[string]string{"store": "ok", "kv": "ok", "corp": "ok"}
+	out := map[string]string{"store": "ok", "kv": "ok", "corp": "ok", "llm": a.agent.LLMStatus()}
 	if err := a.store.Ping(ctx); err != nil {
 		out["store"] = err.Error()
 	}

@@ -89,7 +89,7 @@ func run(log *slog.Logger) error {
 		return tpl.Build(u, states, now()), nil
 	}
 	goalsFn := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return st.Goals(ctx, u.ID) }
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now})
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now, Log: log})
 	a := app.New(app.Config{CorpBaseURL: cfg.CorpURL, AgentTimeout: cfg.AgentTimeout, MsgRateLimit: cfg.MsgRateLimit},
 		app.Deps{Store: st, KV: sessions, Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: hub, Flags: ff, Now: now, Log: log})
 	if err := a.LoadFAQ(ctx); err != nil {
