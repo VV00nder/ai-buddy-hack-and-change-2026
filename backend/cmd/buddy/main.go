@@ -88,13 +88,22 @@ func run(log *slog.Logger) error {
 		}
 		return tpl.Build(u, states, now()), nil
 	}
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, LLM: model, Now: now})
+	goalsFn := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return st.Goals(ctx, u.ID) }
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now})
 	a := app.New(app.Config{CorpBaseURL: cfg.CorpURL, AgentTimeout: cfg.AgentTimeout, MsgRateLimit: cfg.MsgRateLimit},
 		app.Deps{Store: st, KV: sessions, Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: hub, Flags: ff, Now: now, Log: log})
 	if err := a.LoadFAQ(ctx); err != nil {
 		return err
 	}
-	srv := &http.Server{Addr: cfg.Addr, Handler: api.New(a, kb, log, cfg.WebDir, cfg.CookieSecure).Handler(), ReadHeaderTimeout: 5 * time.Second}
+	if err := a.SeedGoals(ctx, demoGoals(now()), map[string]string{"u-anna": "u-maria", "u-ivan": "u-sergey"}); err != nil {
+		return err
+	}
+	apiSrv := api.New(a, kb, log, cfg.WebDir, cfg.CookieSecure)
+	apiSrv.CronToken = cfg.CronToken
+	cronCtx, stopCron := context.WithCancel(ctx)
+	defer stopCron()
+	a.StartReminders(cronCtx, cfg.ReminderEvery)
+	srv := &http.Server{Addr: cfg.Addr, Handler: apiSrv.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("ai-buddy listening", "addr", cfg.Addr, "mode", ag.Mode())
@@ -114,4 +123,19 @@ func run(log *slog.Logger) error {
 	_ = srv.Shutdown(sctx)
 	a.Wait()
 	return nil
+}
+
+// demoGoals — синтетические цели демо-стажёров (как если бы их согласовали на первой неделе).
+func demoGoals(now time.Time) map[string][]app.GoalInput {
+	d := func(days int) string { return now.AddDate(0, 0, days).Format("2006-01-02") }
+	return map[string][]app.GoalInput{
+		"u-anna": {
+			{Title: "Закрыть первую задачу команды: фильтр по дате в выдаче (SEARCH-101)", Metric: "MR прошёл ревью наставника и выкачен на staging", Due: d(14)},
+			{Title: "Разобраться в архитектуре поиска", Metric: "Схема сервисов поиска в Confluence команды, проверена наставником", Due: d(21)},
+			{Title: "Подготовиться к экваторной встрече", Metric: "Презентация с результатами согласована с куратором и руководителем", Due: d(87)},
+		},
+		"u-ivan": {
+			{Title: "Взять на себя дежурство по трекингу посылок", Metric: "Две смены без эскалаций на старшего инженера", Due: d(30)},
+		},
+	}
 }

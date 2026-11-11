@@ -43,7 +43,9 @@ type Deps struct {
 	Corp Corp
 	Plan func(ctx context.Context, u domain.User) (onboarding.Plan, error)
 	LLM  llm.Client // nil — офлайн-режим
-	Now  func() time.Time
+	// Goals — цели стажировки пользователя (необязательно).
+	Goals func(ctx context.Context, u domain.User) ([]domain.Goal, error)
+	Now   func() time.Time
 	// MaxSteps — ограничение шагов вызова инструментов в LLM-режиме.
 	MaxSteps int
 }
@@ -129,6 +131,7 @@ func (a *Agent) step(req Request, kind, label string) {
 var toolLabels = map[string]string{
 	"kb_search":        "Ищу в базе знаний команды",
 	"plan_get":         "Смотрю твой план адаптации",
+	"goals_get":        "Смотрю цели стажировки",
 	"ask_mentor":       "Готовлю вопрос наставнику",
 	"directory_whoami": "Смотрю профиль в справочнике",
 	"directory_team":   "Смотрю состав команды",

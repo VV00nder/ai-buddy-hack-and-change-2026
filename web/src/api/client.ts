@@ -56,6 +56,12 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     plan: () => call('GET', '/api/plan', S.Plan),
     setStep: (stepId: string, status: S.StepStatus, internId?: string, note?: string) =>
       call('PATCH', `/api/plan/steps/${encodeURIComponent(stepId)}`, S.Plan, { status, internId, note }),
+    goals: (internId?: string) =>
+      call('GET', `/api/goals${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ goals: S.Goal.array() })),
+    addGoal: (internId: string, title: string, metric: string, due: string) =>
+      call('POST', '/api/goals', obj({ goal: S.Goal }), { internId, title, metric, due }),
+    updateGoal: (id: string, patch: { status?: S.Goal['status']; progress?: number; note?: string }) =>
+      call('PATCH', `/api/goals/${encodeURIComponent(id)}`, obj({ goal: S.Goal }), patch),
     team: () => call('GET', '/api/team', obj({ interns: S.InternSummary.array() })),
     internPlan: (id: string) => call('GET', `/api/team/${encodeURIComponent(id)}/plan`, obj({ plan: S.Plan, intern: S.User })),
     approvals: () => call('GET', '/api/approvals', obj({ approvals: S.Approval.array() })),

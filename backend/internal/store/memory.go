@@ -17,13 +17,14 @@ type Memory struct {
 	questions map[string]domain.Question
 	notifs    []domain.Notification
 	faqs      []domain.FAQEntry
+	goals     map[string]domain.Goal
 	events    []domain.Event
 }
 
 // NewMemory создаёт пустое хранилище.
 func NewMemory() *Memory {
 	return &Memory{steps: map[string]map[string]domain.StepState{}, messages: map[string]domain.Message{},
-		actions: map[string]domain.Action{}, questions: map[string]domain.Question{}}
+		actions: map[string]domain.Action{}, questions: map[string]domain.Question{}, goals: map[string]domain.Goal{}}
 }
 
 // Ping всегда успешен.
@@ -211,6 +212,41 @@ func (m *Memory) FAQs(context.Context) ([]domain.FAQEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return append([]domain.FAQEntry{}, m.faqs...), nil
+}
+
+func (m *Memory) SaveGoal(_ context.Context, g domain.Goal) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.goals[g.ID] = g
+	return nil
+}
+
+func (m *Memory) Goal(_ context.Context, id string) (domain.Goal, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	g, ok := m.goals[id]
+	if !ok {
+		return g, ErrNotFound
+	}
+	return g, nil
+}
+
+func (m *Memory) Goals(_ context.Context, internID string) ([]domain.Goal, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []domain.Goal{}
+	for _, g := range m.goals {
+		if g.InternID == internID {
+			out = append(out, g)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
 }
 
 func (m *Memory) AddEvent(_ context.Context, e domain.Event) error {

@@ -104,6 +104,17 @@ func contract(t *testing.T, s Store) {
 	if f, _ := s.FAQs(ctx); len(f) != 1 || f[0].Team != "search" {
 		t.Fatal("faq")
 	}
+	_ = s.SaveGoal(ctx, domain.Goal{ID: "g2", InternID: "u1", Title: "B", CreatedAt: t0.Add(time.Minute)})
+	_ = s.SaveGoal(ctx, domain.Goal{ID: "g1", InternID: "u1", Title: "A", Status: domain.GoalAgreed, CreatedAt: t0})
+	g1, _ := s.Goal(ctx, "g1")
+	g1.Progress, g1.Status = 50, domain.GoalInProgress
+	_ = s.SaveGoal(ctx, g1)
+	if gs, _ := s.Goals(ctx, "u1"); len(gs) != 2 || gs[0].ID != "g1" || gs[0].Progress != 50 {
+		t.Fatalf("goals: %+v", gs)
+	}
+	if _, err := s.Goal(ctx, "none"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("goal not found")
+	}
 	_ = s.AddEvent(ctx, domain.Event{ID: "e1", UserID: "u1", Type: "question_asked", Props: map[string]any{"k": "v"}, At: t0})
 	if e, _ := s.Events(ctx); len(e) != 1 || e[0].Props["k"] != "v" {
 		t.Fatal("events")

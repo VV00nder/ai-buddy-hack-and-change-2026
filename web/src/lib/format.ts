@@ -30,7 +30,10 @@ export const roleName: Record<Role, string> = {
   mentor: 'Наставник',
   lead: 'Руководитель',
   hrbp: 'HR BP',
+  engineer: 'Инженер',
 };
+
+export const levelName: Record<string, string> = { read: 'чтение', edit: 'редактирование', admin: 'администрирование' };
 
 export const stepStatusName: Record<StepStatus, string> = {
   todo: 'Не начат',

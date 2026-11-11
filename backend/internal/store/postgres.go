@@ -17,6 +17,9 @@ import (
 //go:embed migrations/001_init.sql
 var migration001 string
 
+//go:embed migrations/002_goals.sql
+var migration002 string
+
 // Postgres — хранилище в PostgreSQL.
 type Postgres struct{ db *sql.DB }
 
@@ -43,7 +46,7 @@ func OpenPostgres(ctx context.Context, dsn string, wait time.Duration) (*Postgre
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, migration001); err != nil {
+	if _, err := db.ExecContext(ctx, migration001+"\n"+migration002); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres migrate: %w", err)
 	}
@@ -55,7 +58,7 @@ func (p *Postgres) Close() error { return p.db.Close() }
 
 // Truncate очищает таблицы (для тестов и сброса демо).
 func (p *Postgres) Truncate(ctx context.Context) error {
-	_, err := p.db.ExecContext(ctx, `TRUNCATE step_states, messages, actions, questions, notifications, faq, events`)
+	_, err := p.db.ExecContext(ctx, `TRUNCATE step_states, messages, actions, questions, notifications, faq, events, goals`)
 	return err
 }
 
@@ -206,6 +209,19 @@ func (p *Postgres) AddFAQ(ctx context.Context, f domain.FAQEntry) error {
 
 func (p *Postgres) FAQs(ctx context.Context) ([]domain.FAQEntry, error) {
 	return getMany[domain.FAQEntry](ctx, p.db, `SELECT data FROM faq ORDER BY created_at`)
+}
+
+func (p *Postgres) SaveGoal(ctx context.Context, g domain.Goal) error {
+	return p.upsert(ctx, `INSERT INTO goals (id, intern_id, created_at, data) VALUES ($1,$2,$3,$4)
+		ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data`, g, g.ID, g.InternID, g.CreatedAt)
+}
+
+func (p *Postgres) Goal(ctx context.Context, id string) (domain.Goal, error) {
+	return getOne[domain.Goal](ctx, p.db, `SELECT data FROM goals WHERE id=$1`, id)
+}
+
+func (p *Postgres) Goals(ctx context.Context, internID string) ([]domain.Goal, error) {
+	return getMany[domain.Goal](ctx, p.db, `SELECT data FROM goals WHERE intern_id=$1 ORDER BY created_at, id`, internID)
 }
 
 func (p *Postgres) AddEvent(ctx context.Context, e domain.Event) error {

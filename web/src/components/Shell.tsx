@@ -25,6 +25,7 @@ const navByRole: Record<User['role'], { view: View; label: string }[]> = {
   ],
   mentor: [
     { view: 'inbox', label: 'Вопросы стажёров' },
+    { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
     { view: 'insights', label: 'Польза' },
     { view: 'chat', label: 'Чат' },
@@ -34,6 +35,11 @@ const navByRole: Record<User['role'], { view: View; label: string }[]> = {
     { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
     { view: 'insights', label: 'Польза' },
+    { view: 'chat', label: 'Чат' },
+    { view: 'knowledge', label: 'Инструкции' },
+  ],
+  engineer: [
+    { view: 'approvals', label: 'Согласования' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
   ],

@@ -22,6 +22,9 @@ var localTools = []llm.Tool{
 	{Type: "function", Function: llm.FunctionSpec{Name: "plan_get",
 		Description: "План адаптации стажёра: день стажировки, прогресс, следующий шаг, шаги текущего этапа.",
 		Parameters:  map[string]any{"type": "object", "properties": map[string]any{}}}},
+	{Type: "function", Function: llm.FunctionSpec{Name: "goals_get",
+		Description: "Цели стажировки пользователя: формулировка, критерий успеха, срок, статус и прогресс.",
+		Parameters:  map[string]any{"type": "object", "properties": map[string]any{}}}},
 	{Type: "function", Function: llm.FunctionSpec{Name: "ask_mentor",
 		Description: "Подготовить вопрос наставнику, если в базе знаний нет ответа. Стажёр подтвердит отправку.",
 		Parameters: map[string]any{"type": "object", "properties": map[string]any{
@@ -132,6 +135,15 @@ func (a *Agent) runTool(ctx context.Context, req Request, tc llm.ToolCall, reply
 			out["next"] = map[string]any{"title": p.Next.Title, "description": p.Next.Description}
 		}
 		return out
+	case "goals_get":
+		if a.d.Goals == nil {
+			return map[string]any{"goals": []any{}}
+		}
+		goals, err := a.d.Goals(ctx, req.User)
+		if err != nil {
+			return map[string]any{"error": "goals_unavailable"}
+		}
+		return map[string]any{"goals": goals}
 	case "ask_mentor":
 		q, _ := args["question"].(string)
 		if q == "" {

@@ -50,6 +50,12 @@ func newEnv(t *testing.T, model llm.Client) *env {
 				return onboarding.Plan{}, errors.New("db down")
 			}
 			return tpl.Build(u, nil, now()), nil
+		},
+		Goals: func(_ context.Context, u domain.User) ([]domain.Goal, error) {
+			if u.ID == "broken" {
+				return nil, errors.New("db down")
+			}
+			return []domain.Goal{{Title: "Закрыть SEARCH-101", Metric: "MR выкачен", Due: "2026-11-24", Status: domain.GoalInProgress, Progress: 40}}, nil
 		}})
 	return e
 }
@@ -110,12 +116,33 @@ func TestOfflineDayOffScenario(t *testing.T) {
 func TestOfflineAccessScenario(t *testing.T) {
 	e := newEnv(t, nil)
 	r := e.ask("Какие доступы мне нужны?")
-	if !strings.Contains(r.Text, "Можно запросить") || len(r.Suggestions) == 0 || strings.Contains(r.Text, "Kubernetes") {
+	if !strings.Contains(r.Text, "Можно запросить") || len(r.Suggestions) == 0 || strings.Contains(r.Text, "продовые") || !strings.Contains(r.Text, "владелец проекта") {
 		t.Fatalf("overview: %s", r.Text)
 	}
+	// Stash: проект не указан — ассистент уточняет его и предлагает проекты команды
 	r = e.ask("Запроси доступ к stash на запись")
-	if r.Proposal == nil || r.Proposal.Args["system"] != "stash" || r.Proposal.Args["level"] != "write" || !strings.Contains(r.Text, "Мария") {
+	if r.Proposal != nil || r.Context["awaiting"] != "access_project" || len(r.Suggestions) != 3 || r.Context["level"] != "edit" {
+		t.Fatalf("stash project question: %+v", r)
+	}
+	r = e.ask("search-api", assistantCtx(r))
+	if r.Proposal == nil || r.Proposal.Args["project"] != "search-api" || r.Proposal.Args["level"] != "edit" ||
+		!strings.Contains(r.Text, "владелец проекта: Олег Кузнецов") || r.Proposal.Title != "Stash: репозиторий — search-api" {
 		t.Fatalf("stash: %+v", r)
+	}
+	// проект и уровень в одном сообщении; администрирование стажёру не выдаётся
+	if r := e.ask("дай доступ к stash search-web на чтение"); r.Proposal == nil || r.Proposal.Args["level"] != "read" || !strings.Contains(r.Text, "Мария") {
+		t.Fatalf("stash read: %+v", r)
+	}
+	if r := e.ask("нужен админский доступ к stash search-indexer"); r.Proposal != nil || !strings.Contains(r.Text, "не выдаётся") || len(r.Suggestions) != 1 {
+		t.Fatalf("admin: %+v", r)
+	}
+	// тестовый кластер согласует DevOps и нужно обоснование
+	r = e.ask("нужен доступ к staging кластеру")
+	if r.Context["awaiting"] != "access_justification" {
+		t.Fatalf("staging: %+v", r)
+	}
+	if r := e.ask("Отладка индексатора поиска для задачи SEARCH-77", assistantCtx(r)); r.Proposal == nil || !strings.Contains(r.Text, "DevOps") {
+		t.Fatalf("staging justification: %+v", r)
 	}
 	// продовый kubernetes стажёру не положен — объясняем, ничего не готовим
 	r = e.ask("дай доступ к kubernetes")
@@ -181,7 +208,7 @@ func TestOfflineQA(t *testing.T) {
 		t.Fatalf("no statuses: %s", r.Text)
 	}
 	_, _ = e.corp.CreateAbsence(identity.Claims{Sub: e.anna.ID}, corp.AbsenceInput{DateFrom: "2026-11-13"})
-	_, _ = e.corp.RequestAccess(identity.Claims{Sub: e.anna.ID}, corp.AccessInput{System: "stash"})
+	_, _ = e.corp.RequestAccess(identity.Claims{Sub: e.anna.ID}, corp.AccessInput{System: "stash", Project: "search-api"})
 	if r := e.ask("какой статус моих заявок?"); !strings.Contains(r.Text, "ждёт согласования") || !strings.Contains(r.Text, "Stash") {
 		t.Fatalf("statuses: %s", r.Text)
 	}
@@ -352,4 +379,29 @@ func TestHelpers(t *testing.T) {
 	if earliestDayOff(time.Date(2026, 11, 13, 10, 0, 0, 0, msk)).Weekday() != time.Tuesday {
 		t.Fatal("earliest from friday")
 	}
+}
+
+func TestGoalsIntent(t *testing.T) {
+	model := &scripted{steps: []llm.Message{toolMsg(call("1", "goals_get", nil)), {Role: "assistant", Content: "Цели: SEARCH-101"}}}
+	e := newEnv(t, model)
+	if r := e.ask("мои цели"); r.Mode != "llm" || !strings.Contains(model.seen[1][len(model.seen[1])-1].Content, "SEARCH-101") {
+		t.Fatalf("llm goals: %+v", r)
+	}
+	off := newEnv(t, nil)
+	if r := off.ask("Какие у меня цели на стажировку?"); !strings.Contains(r.Text, "Закрыть SEARCH-101") || !strings.Contains(r.Text, "в работе, прогресс 40%") {
+		t.Fatalf("goals: %s", r.Text)
+	}
+	off.anna.ID = "broken"
+	if r := off.ask("мои цели"); !strings.Contains(r.Text, "Не получилось") {
+		t.Fatal("goals error")
+	}
+	// без источника целей инструмент возвращает пустой список
+	e2 := newEnv(t, &scripted{steps: []llm.Message{toolMsg(call("1", "goals_get", nil)), {Role: "assistant", Content: "нет"}}})
+	e2.agent.d.Goals = nil
+	if r := e2.ask("цели"); r.Mode != "llm" {
+		t.Fatal("nil goals")
+	}
+	e3 := newEnv(t, &scripted{steps: []llm.Message{toolMsg(call("1", "goals_get", nil)), {Role: "assistant", Content: "ошибка"}}})
+	e3.anna.ID = "broken"
+	_ = e3.ask("цели")
 }

@@ -12,7 +12,8 @@
 | `FF_*` из переменных окружения | Feature flags (compile-time и runtime) | Читать флаги из сервиса флагов; точки проверки уже выделены (`app.applyFlags`, `submitCorp`, `submitQuestion`) |
 | Таблица `events` + JSON-логи | Clickstream / Kafka | Добавить sink, публикующий `domain.Event` в Kafka; формат уже плоский: `type`, `userId`, `props`, `at` |
 | `/metrics` в формате Prometheus | Grafana | Добавить scrape; готовы `buddy_events_total{type}` и гистограмма `buddy_agent_seconds` |
-| Внутренний ИИ-крон | Внутренний ИИ-крон | Ежедневное напоминание о просроченных шагах: вызов `PlanFor` + уведомление |
+| `POST /api/cron/reminders` + встроенный таймер | Внутренний ИИ-крон | ИИ-крон по расписанию вызывает эндпоинт со служебным токеном `X-Cron-Token`; встроенный таймер отключается (`REMINDER_INTERVAL_MINUTES=0`) |
+| Согласующие из `fixtures` (владельцы проектов, дежурный DevOps) | Система доступов, владельцы ресурсов | Согласующего определяет сервис доступов; AI-buddy только показывает его и напоминает о зависших заявках |
 | Веб и PWA | Корпоративный мессенджер | Бот-адаптер как ещё один клиент API: входящие сообщения → `POST /api/messages`, обновления из `events.Hub` → уведомления в мессенджер |
 | Docker Compose | Docker, CI/CD | Готовые образы `buddy` и `corpmock`, GitHub Actions как пример пайплайна |
 

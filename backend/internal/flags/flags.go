@@ -14,6 +14,7 @@ type Flags struct {
 	MentorEscalation bool `json:"mentorEscalation"`
 	FAQFromAnswers   bool `json:"faqFromAnswers"`
 	LLM              bool `json:"llm"`
+	Proactive        bool `json:"proactive"`
 }
 
 // FromEnv читает флаги; по умолчанию всё включено.
@@ -34,5 +35,6 @@ func FromEnv(getenv func(string) string) Flags {
 		MentorEscalation: b("FF_MENTOR_ESCALATION"),
 		FAQFromAnswers:   b("FF_FAQ_FROM_ANSWERS"),
 		LLM:              b("FF_LLM"),
+		Proactive:        b("FF_PROACTIVE"),
 	}
 }

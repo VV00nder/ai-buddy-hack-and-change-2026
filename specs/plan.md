@@ -24,8 +24,10 @@
 
 8. **Агент не привязан к каналу.** Вся логика за HTTP API; веб и PWA — клиенты. Новый канал (бот корпоративного мессенджера) — адаптер к тем же эндпоинтам и потоку событий. Публичные мессенджеры не используются: данные не покидают контур компании.
 
+9. **Проактивность через ИИ-крон.** Напоминания не требуют отдельного планировщика внутри AI-buddy: внешний ИИ-крон вызывает `POST /api/cron/reminders`; встроенный таймер — только для локального стенда.
+
 ## Модель данных (PostgreSQL)
-`step_states(user_id, step_id, status, note, updated_by, updated_at)`, `messages`, `actions`, `questions`, `notifications`, `faq`, `events`. Поля для выборок вынесены в колонки, вложенные структуры хранятся в `jsonb`. Миграция `backend/internal/store/migrations/001_init.sql` применяется при старте.
+`step_states(user_id, step_id, status, note, updated_by, updated_at)`, `goals`, `messages`, `actions`, `questions`, `notifications`, `faq`, `events`. Поля для выборок вынесены в колонки, вложенные структуры хранятся в `jsonb`. Миграция `backend/internal/store/migrations/001_init.sql` применяется при старте.
 
 ## Нефункциональные требования
 - Локальные операции < 1 с: проверено e2e; типичный ответ офлайн-агента — десятки миллисекунд.

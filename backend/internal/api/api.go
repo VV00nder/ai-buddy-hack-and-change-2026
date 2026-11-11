@@ -30,11 +30,13 @@ const CookieName = "buddy_session"
 
 // Server — HTTP-сервер.
 type Server struct {
-	app    *app.App
-	kb     *knowledge.Base
-	log    *slog.Logger
-	webDir string
-	secure bool
+	// CronToken — токен внутреннего ИИ-крона для POST /api/cron/reminders.
+	CronToken string
+	app       *app.App
+	kb        *knowledge.Base
+	log       *slog.Logger
+	webDir    string
+	secure    bool
 }
 
 // New создаёт сервер.
@@ -58,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/auth/demo-users", s.demoUsers)
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
+	mux.HandleFunc("POST /api/cron/reminders", s.cronReminders)
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		s.app.Metrics().WritePrometheus(w)
@@ -73,6 +76,9 @@ func (s *Server) Handler() http.Handler {
 	auth("POST /api/actions/{id}/cancel", s.cancelAction)
 	auth("GET /api/plan", s.plan)
 	auth("PATCH /api/plan/steps/{step}", s.setStep)
+	auth("GET /api/goals", s.goals)
+	auth("POST /api/goals", s.addGoal)
+	auth("PATCH /api/goals/{id}", s.updateGoal)
 	auth("GET /api/team", s.team)
 	auth("GET /api/team/{intern}/plan", s.internPlan)
 	auth("GET /api/approvals", s.approvals)
@@ -103,7 +109,8 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
 		// Защита от CSRF: изменяющие запросы обязаны нести собственный заголовок,
 		// который браузер не отправит с чужого сайта без CORS.
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Header.Get("X-Requested-With") != "ai-buddy" {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/api/cron/") &&
+			r.Method != http.MethodGet && r.Header.Get("X-Requested-With") != "ai-buddy" {
 			writeErr(w, http.StatusForbidden, "csrf", "Нет заголовка X-Requested-With")
 			return
 		}
@@ -196,6 +203,20 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		code = 503
 	}
 	writeJSON(w, code, st)
+}
+
+// cronReminders — точка вызова для внутреннего ИИ-крона (служебный токен, не cookie).
+func (s *Server) cronReminders(w http.ResponseWriter, r *http.Request) {
+	if s.CronToken == "" || r.Header.Get("X-Cron-Token") != s.CronToken {
+		writeErr(w, 403, "forbidden", "Нужен X-Cron-Token")
+		return
+	}
+	rep, err := s.app.RunReminders(r.Context())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, rep)
 }
 
 func (s *Server) config(w http.ResponseWriter, _ *http.Request) {
@@ -342,6 +363,44 @@ func (s *Server) setStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, p)
+}
+
+func (s *Server) goals(w http.ResponseWriter, r *http.Request) {
+	g, err := s.app.Goals(r.Context(), sessionFrom(r).User, r.URL.Query().Get("internId"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"goals": g})
+}
+
+func (s *Server) addGoal(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		InternID string `json:"internId"`
+		app.GoalInput
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	g, err := s.app.AddGoal(r.Context(), sessionFrom(r).User, in.InternID, in.GoalInput)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 201, map[string]any{"goal": g})
+}
+
+func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request) {
+	var in app.GoalUpdate
+	if !decode(w, r, &in) {
+		return
+	}
+	g, err := s.app.UpdateGoal(r.Context(), sessionFrom(r).User, r.PathValue("id"), in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"goal": g})
 }
 
 func (s *Server) team(w http.ResponseWriter, r *http.Request) {

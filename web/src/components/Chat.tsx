@@ -11,6 +11,7 @@ const starters: Record<User['role'], string[]> = {
   mentor: ['Что такое Zero Bug Policy?', 'Как подготовить стажёра к экватору?'],
   lead: ['Что такое Zero Bug Policy?', 'Как стажёру получить доступ к Redash?'],
   hrbp: ['Как проходит экваторная встреча?'],
+  engineer: ['Какие доступы нужны стажёру?'],
 };
 
 export function Chat({ user }: { user: User }) {
@@ -114,7 +115,8 @@ export function Bubble({ m, action, onSuggest, isLast }: { m: Message; action?: 
     );
   }
   return (
-    <div className={`bubble assistant ${m.status === 'error' ? 'failed' : ''} ${m.mode === 'mentor' ? 'from-mentor' : ''}`}>
+    <div className={`bubble assistant ${m.status === 'error' ? 'failed' : ''} ${m.mode === 'mentor' ? 'from-mentor' : ''} ${m.mode === 'proactive' ? 'proactive' : ''}`}>
+      {m.mode === 'proactive' && <p className="muted small">Напоминание AI-buddy</p>}
       <div className="md">
         <Markdown text={m.text} />
       </div>

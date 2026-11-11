@@ -2,7 +2,7 @@
 // от неожиданного ответа сервера.
 import { z } from 'zod';
 
-export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp']);
+export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'engineer']);
 export type Role = z.infer<typeof Role>;
 
 export const User = z.object({
@@ -152,8 +152,25 @@ export const InternSummary = z.object({
   overdue: z.number(),
   nextStep: z.string().optional(),
   openQuestions: z.number(),
+  goalsDone: z.number().optional().default(0),
+  goalsTotal: z.number().optional().default(0),
 });
 export type InternSummary = z.infer<typeof InternSummary>;
+
+export const Goal = z.object({
+  id: z.string(),
+  internId: z.string(),
+  title: z.string(),
+  metric: z.string(),
+  due: z.string(),
+  status: z.enum(['agreed', 'in_progress', 'done']),
+  progress: z.number(),
+  note: z.string().optional(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+export type Goal = z.infer<typeof Goal>;
 
 export const Insights = z.object({
   questions: z.number(),

@@ -41,11 +41,17 @@ function seeded() {
       { id: 'q2', internId: 'u-anna', mentorId: 'u-oleg', text: 'Где логи?', answer: 'В Observer', addToFaq: true, status: 'answered', createdAt: '2026-11-10T12:00:00Z' },
     ],
   });
-  qc.setQueryData(keys.team, { interns: [{ user: anna, day: 4, percent: 33, done: 1, total: 3, overdue: 1, nextStep: 'Stash', openQuestions: 1 }] });
+  qc.setQueryData(keys.team, { interns: [
+    { user: anna, day: 4, percent: 33, done: 1, total: 3, overdue: 1, nextStep: 'Stash', openQuestions: 1, goalsDone: 1, goalsTotal: 2 },
+    { user: { ...anna, id: 'u-x' }, day: 30, percent: 100, done: 3, total: 3, overdue: 0, openQuestions: 0, goalsDone: 0, goalsTotal: 0 },
+  ] });
   qc.setQueryData(keys.internPlan('u-anna'), { plan, intern: anna });
   qc.setQueryData(keys.docs, { docs: [{ id: 'process-day-off', title: 'Как оформить отгул', tags: [] }] });
   qc.setQueryData(keys.doc('process-day-off'), { id: 'process-day-off', title: 'Как оформить отгул', tags: [], sections: [{ heading: 'Отгул', text: '- шаг' }] });
   qc.setQueryData(['demo-users'], { users: [anna, maria], password: 'buddy2026' });
+  const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 40, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
+  qc.setQueryData(keys.goals(), { goals: [goal, { ...goal, id: 'g2', title: 'Экватор', status: 'done', progress: 100, note: undefined }] });
+  qc.setQueryData(keys.goals('u-anna'), { goals: [] });
   return qc;
 }
 
@@ -80,6 +86,7 @@ test('bubble variants', () => {
   const rated = html(<Bubble m={{ ...msgs[1]!, feedback: true }} onSuggest={() => undefined} isLast />, qc);
   assert.match(rated, /aria-pressed="true"/);
   assert.match(rated, /Статус моих заявок/);
+  assert.match(html(<Bubble m={{ ...msgs[1]!, mode: 'proactive' }} onSuggest={() => undefined} isLast={false} />, qc), /Напоминание AI-buddy/);
 });
 
 test('action card states', () => {
@@ -88,7 +95,7 @@ test('action card states', () => {
     { status: 'submitted', externalId: 'ABS-1', args: { date_from: '2026-11-13', date_to: '2026-11-16' } },
     { status: 'approved', result: { comment: 'Хорошего отдыха' } },
     { status: 'failed', error: 'Слишком поздно' },
-    { kind: 'access', title: 'Stash', args: { system: 'stash', level: 'write' }, preview: { level: 'write', expected: 'Согласует Мария', approval: 'lead' } },
+    { kind: 'access', title: 'Stash: репозиторий — search-api', args: { system: 'stash', level: 'edit' }, preview: { level: 'edit', project: 'search-api', approver: 'Олег Кузнецов', approver_role: 'владелец проекта', approval: 'owner' } },
     { kind: 'access', title: 'VPN', status: 'approved', preview: { approval: 'auto', level: 'user' }, result: { comment: 'ok' }, externalId: 'ACC-1' },
     { kind: 'mentor_question', title: 'Вопрос наставнику', args: { question: 'Где стенд?' }, preview: {} },
     { kind: 'mentor_question', title: 'Вопрос наставнику', status: 'approved', result: { mentor: 'Олег', answer: 'search-staging' } },
@@ -100,7 +107,11 @@ test('action card states', () => {
   assert.match(outs[2]!, /Хорошего отдыха/);
   assert.match(outs[3]!, /Слишком поздно/);
   assert.match(outs[4]!, /Для какой задачи/);
+  assert.match(outs[4]!, /Олег Кузнецов, владелец проекта/);
+  assert.match(outs[4]!, /редактирование/);
+  assert.match(outs[4]!, /search-api/);
   assert.match(outs[5]!, /Выдан/);
+  assert.match(html(<ActionCard action={{ ...absence, kind: 'access', title: 'VPN', preview: { approval: 'auto', level: 'read' } } as Action} />), /Сразу после отправки/);
   assert.match(outs[6]!, /Отправить наставнику/);
   assert.match(outs[7]!, /search-staging/);
   assert.equal(editableFields({ ...absence, kind: 'access', preview: { approval: 'auto' } }).length, 0);
@@ -117,7 +128,19 @@ test('plan and today panel', () => {
   assert.match(out, /Спросить buddy/);
   assert.match(html(<PlanBody plan={plan} internId="u-anna" internName="Анна Смирнова" />), /План стажёра/);
   assert.match(html(<PlanView />), /1 неделя/);
-  assert.match(html(<PlanView internId="u-anna" />), /Анна Смирнова/);
+  const lead = html(<PlanView internId="u-anna" />);
+  assert.match(lead, /Анна Смирнова/);
+  assert.match(lead, /Поставьте стажёру/);
+  assert.match(lead, /Добавить цель/);
+  const own = html(<PlanView />);
+  assert.match(own, /Цели стажировки/);
+  assert.match(own, /Критерий успеха: MR выкачен на staging/);
+  assert.match(own, /1 из 2 выполнено/);
+  assert.match(own, /Вернуть в работу/);
+  assert.match(own, /жду ревью/);
+  const noGoals = seeded();
+  noGoals.setQueryData(keys.goals(), { goals: [] });
+  assert.match(html(<PlanView />, noGoals), /согласует руководитель/);
   assert.match(html(<PlanView />, makeQueryClient()), /Загружаю план/);
   const today = html(<TodayPanel />);
   assert.match(today, /день стажировки/);
@@ -139,7 +162,10 @@ test('mentor and lead screens', () => {
   noA.setQueryData(keys.approvals, { approvals: [] });
   assert.match(html(<Approvals />, noA), /Нечего согласовывать/);
   useUi.getState().go('team');
-  assert.match(html(<Team />), /1 без ответа/);
+  const team = html(<Team />);
+  assert.match(team, /1 без ответа/);
+  assert.match(team, /1 из 2/);
+  assert.match(team, /не поставлены/);
   useUi.getState().go('team', { internId: 'u-anna' });
   assert.match(html(<Team />), /Все стажёры/);
   useUi.getState().go('team');

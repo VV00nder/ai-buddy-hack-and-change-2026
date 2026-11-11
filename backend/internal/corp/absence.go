@@ -119,7 +119,7 @@ func (s *Service) CreateAbsence(c identity.Claims, in AbsenceInput) (map[string]
 		Reason: strings.TrimSpace(in.Reason), Status: "pending", ApproverID: lead.ID, Approver: lead.Name, CreatedAt: s.now()}
 	out := map[string]any{
 		"dry_run": in.DryRun, "type": a.Type, "date_from": a.DateFrom, "date_to": a.DateTo,
-		"days": days, "approver": lead.Name, "balance_after": s.balance[p.ID] - days*boolInt(in.Type == "day_off"),
+		"days": days, "approver": lead.Name, "approver_id": lead.ID, "balance_after": s.balance[p.ID] - days*boolInt(in.Type == "day_off"),
 		"period":     humanDate(from) + map[bool]string{true: "", false: " — " + humanDate(to)}[from.Equal(to)],
 		"next_steps": []string{"Руководитель согласует заявку", "Предупреди наставника и команду в чате", "Перенеси встречи на эти даты"},
 	}

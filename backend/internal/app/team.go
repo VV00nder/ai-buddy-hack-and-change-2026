@@ -27,7 +27,7 @@ type Approval struct {
 
 // Approvals — входящие на согласование (руководитель).
 func (a *App) Approvals(ctx context.Context, s kv.Session) ([]Approval, error) {
-	if s.User.Role != domain.RoleLead {
+	if !canApprove(s.User) {
 		return nil, ErrForbidden
 	}
 	out := []Approval{}
@@ -47,10 +47,22 @@ func (a *App) Approvals(ctx context.Context, s kv.Session) ([]Approval, error) {
 	}
 	for _, it := range asList(acc["items"]) {
 		m := it.(map[string]any)
+		title := fmt.Sprintf("Доступ: %v", m["systemName"])
+		if p, _ := m["project"].(string); p != "" {
+			title += " — " + p
+		}
+		title += ", " + levelName[fmt.Sprint(m["level"])]
 		out = append(out, Approval{Kind: "access", ExternalID: fmt.Sprint(m["id"]), UserID: fmt.Sprint(m["userId"]),
-			UserName: fmt.Sprint(m["userName"]), Title: fmt.Sprintf("Доступ: %v (%v)", m["systemName"], m["level"]), Details: m})
+			UserName: fmt.Sprint(m["userName"]), Title: title, Details: m})
 	}
 	return out, nil
+}
+
+var levelName = map[string]string{"read": "чтение", "edit": "редактирование", "admin": "администрирование"}
+
+// canApprove — согласующими бывают руководители, наставники (владельцы проектов) и инженеры (DevOps).
+func canApprove(u domain.User) bool {
+	return u.Role == domain.RoleLead || u.Role == domain.RoleMentor || u.Role == domain.RoleEngineer
 }
 
 // absenceRange — «Отгул на 12.11 (чт), 1 раб. день» или «Отпуск 14.12–18.12, 5 раб. дней».
@@ -92,7 +104,7 @@ func asList(v any) []any {
 
 // Decide — решение руководителя по заявке; результат возвращается стажёру.
 func (a *App) Decide(ctx context.Context, s kv.Session, kind, externalID string, approve bool, comment string) error {
-	if s.User.Role != domain.RoleLead {
+	if !canApprove(s.User) {
 		return ErrForbidden
 	}
 	if utf8.RuneCountInString(comment) > 500 {
@@ -233,6 +245,8 @@ type InternSummary struct {
 	Overdue       int         `json:"overdue"`
 	NextStep      string      `json:"nextStep,omitempty"`
 	OpenQuestions int         `json:"openQuestions"`
+	GoalsDone     int         `json:"goalsDone"`
+	GoalsTotal    int         `json:"goalsTotal"`
 }
 
 // Team — стажёры, которых видит наставник, руководитель или HR BP.
@@ -261,6 +275,13 @@ func (a *App) Team(ctx context.Context, viewer domain.User) ([]InternSummary, er
 			}
 		}
 		s := InternSummary{User: u, Day: p.Day, Percent: p.Percent, Done: p.Done, Total: p.Total, Overdue: p.Overdue, OpenQuestions: open}
+		goals, _ := a.store.Goals(ctx, u.ID)
+		for _, g := range goals {
+			s.GoalsTotal++
+			if g.Status == domain.GoalDone {
+				s.GoalsDone++
+			}
+		}
 		if p.Next != nil {
 			s.NextStep = p.Next.Title
 		}

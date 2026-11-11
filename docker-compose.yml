@@ -53,6 +53,9 @@ services:
       FF_ACCESS_ACTIONS: ${FF_ACCESS_ACTIONS:-true}
       FF_MENTOR_ESCALATION: ${FF_MENTOR_ESCALATION:-true}
       FF_FAQ_FROM_ANSWERS: ${FF_FAQ_FROM_ANSWERS:-true}
+      FF_PROACTIVE: ${FF_PROACTIVE:-true}
+      CRON_TOKEN: ${CRON_TOKEN:-demo-cron}
+      REMINDER_INTERVAL_MINUTES: ${REMINDER_INTERVAL_MINUTES:-60}
     ports: ["8080:8080"]
 
   # Тесты и отчёт о покрытии: docker compose --profile test run --rm tests

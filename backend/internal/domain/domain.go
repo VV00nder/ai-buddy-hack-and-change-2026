@@ -11,6 +11,8 @@ const (
 	RoleMentor Role = "mentor"
 	RoleLead   Role = "lead"
 	RoleHRBP   Role = "hrbp"
+	// RoleEngineer — сотрудник без управленческой роли (например, дежурный DevOps).
+	RoleEngineer Role = "engineer"
 )
 
 // User — профиль сотрудника из корпоративного справочника (синтетика).
@@ -170,6 +172,30 @@ type FAQEntry struct {
 	Answer    string    `json:"answer"`
 	AuthorID  string    `json:"authorId"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+// GoalStatus — статус цели стажировки.
+type GoalStatus string
+
+const (
+	GoalAgreed     GoalStatus = "agreed"
+	GoalInProgress GoalStatus = "in_progress"
+	GoalDone       GoalStatus = "done"
+)
+
+// Goal — измеримая цель на период стажировки (трекер прогресса из чек-листа).
+type Goal struct {
+	ID        string     `json:"id"`
+	InternID  string     `json:"internId"`
+	Title     string     `json:"title"`
+	Metric    string     `json:"metric"` // критерий успеха
+	Due       string     `json:"due"`    // ГГГГ-ММ-ДД
+	Status    GoalStatus `json:"status"`
+	Progress  int        `json:"progress"` // 0..100
+	Note      string     `json:"note,omitempty"`
+	CreatedBy string     `json:"createdBy"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
 // Event — продуктовое событие (совместимо по форме с clickstream).

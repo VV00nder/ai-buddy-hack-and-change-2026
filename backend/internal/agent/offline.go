@@ -32,6 +32,7 @@ var systemAliases = []struct {
 	id    string
 	words []string
 }{
+	{"k8s-staging", []string{"staging", "стейдж", "стэйдж", "тестовый кластер", "стенд"}},
 	{"k8s-prod", []string{"kubernetes", "k8s", "кубер", "продов"}},
 	{"confluence-cluster", []string{"кластер"}},
 	{"channel-tech-dep", []string{"tech-dep", "techdep", "техдеп", "tech dep", "тех деп"}},
@@ -42,6 +43,21 @@ var systemAliases = []struct {
 	{"grafana", []string{"grafana", "графан"}},
 	{"sentry", []string{"sentry", "сентри"}},
 	{"redash", []string{"redash", "редаш"}},
+}
+
+var reProject = regexp.MustCompile(`\b(search-api|search-indexer|search-web|delivery-tracking)\b`)
+
+// detectLevel — уровень прав из текста: чтение, редактирование, администрирование.
+func detectLevel(t string) string {
+	switch {
+	case has(t, "админ", "admin"):
+		return "admin"
+	case has(t, "запис", "write", "редакт", "edit", "пуш", "push", "изменен"):
+		return "edit"
+	case has(t, "чтени", "read", "просмотр", "только смотреть"):
+		return "read"
+	}
+	return ""
 }
 
 func detectSystem(t string) string {
@@ -74,7 +90,11 @@ func (a *Agent) handleOffline(ctx context.Context, req Request) Reply {
 		}
 	case awaiting["awaiting"] == "access_justification":
 		if utf8.RuneCountInString(strings.TrimSpace(req.Text)) >= 15 {
-			return a.accessFlow(ctx, req, awaiting["system"], awaiting["level"], strings.TrimSpace(req.Text))
+			return a.accessFlow(ctx, req, accessReq{awaiting["system"], awaiting["project"], awaiting["level"], strings.TrimSpace(req.Text)})
+		}
+	case awaiting["awaiting"] == "access_project":
+		if p := reProject.FindString(t); p != "" {
+			return a.accessFlow(ctx, req, accessReq{awaiting["system"], p, awaiting["level"], awaiting["justification"]})
 		}
 	}
 	switch {
@@ -93,6 +113,8 @@ func (a *Agent) handleOffline(ctx context.Context, req Request) Reply {
 		return a.absenceFlow(ctx, req, t)
 	case has(t, "доступ", "права ", "прав к", "access") || (detectSystem(t) != "" && !has(t, "как ", "что такое", "зачем") && has(t, "дай", "выдай", "запроси", "нужен", "нужна", "добавь", "хочу")):
 		return a.accessIntent(ctx, req, t)
+	case a.d.Goals != nil && has(t, "мои цели", "у меня цели", "какие цели", "цели на стажир", "цели стажир", "цель стажир", "критери", "ожидания от меня", "что от меня ждут", "мои задачи на стажир"):
+		return a.goalsReply(ctx, req)
 	case has(t, "что дальше", "что делать", "что мне делать", "следующий шаг", "следующ", "мой план", "план адаптации", "с чего начать", "что осталось", "прогресс"):
 		return a.planReply(ctx, req)
 	case has(t, "мой наставник", "мой бадди", "мой руководитель", "мой лид", "к кому обратиться", "кто в команде", "кто мой", "кто моя", "кто есть кто", "контакты"):
@@ -229,24 +251,25 @@ func (a *Agent) accessIntent(ctx context.Context, req Request, t string) Reply {
 	if sys == "" {
 		return a.accessOverview(ctx, req)
 	}
-	level := ""
-	if has(t, "запис", "write", "пуш", "push") {
-		level = "write"
-	}
-	just := ""
+	ar := accessReq{system: sys, project: reProject.FindString(t), level: detectLevel(t)}
 	if m := reJustification.FindStringSubmatch(req.Text); m != nil {
-		just = strings.TrimSpace(m[1])
+		ar.justification = strings.TrimSpace(m[1])
 	}
-	return a.accessFlow(ctx, req, sys, level, just)
+	return a.accessFlow(ctx, req, ar)
 }
 
-func (a *Agent) accessFlow(ctx context.Context, req Request, sys, level, just string) Reply {
-	args := map[string]any{"system": sys}
-	if level != "" {
-		args["level"] = level
-	}
-	if just != "" {
-		args["justification"] = just
+type accessReq struct{ system, project, level, justification string }
+
+func (ar accessReq) context(waitFor string) map[string]string {
+	return map[string]string{"awaiting": waitFor, "system": ar.system, "project": ar.project, "level": ar.level, "justification": ar.justification}
+}
+
+func (a *Agent) accessFlow(ctx context.Context, req Request, ar accessReq) Reply {
+	args := map[string]any{"system": ar.system}
+	for k, v := range map[string]string{"project": ar.project, "level": ar.level, "justification": ar.justification} {
+		if v != "" {
+			args[k] = v
+		}
 	}
 	p, ce, err := a.prepareAccess(ctx, req, args)
 	if err != nil {
@@ -256,14 +279,25 @@ func (a *Agent) accessFlow(ctx context.Context, req Request, sys, level, just st
 		r := Reply{Text: explainCallError(ce), Answered: true}
 		switch ce.Code {
 		case "justification_required":
-			r.Context = map[string]string{"awaiting": "access_justification", "system": sys, "level": level}
+			r.Context = ar.context("access_justification")
 			r.Text += "\n\nНапиши одним сообщением, для какой задачи нужен доступ."
+		case "project_required", "unknown_project":
+			r.Context = ar.context("access_project")
+			_, list, _ := strings.Cut(ce.Message, ": ")
+			for _, p := range strings.Split(list, ", ") {
+				if p != "" {
+					r.Suggestions = append(r.Suggestions, p)
+				}
+			}
+			r.Text = "К какому проекту нужен доступ? " + ce.Message
+		case "level_not_allowed":
+			r.Suggestions = []string{"Запроси доступ к " + ar.system + " " + ar.project + " на редактирование"}
 		case "duplicate":
 			r.Suggestions = []string{"Статус моих заявок"}
 		}
 		return r
 	}
-	text := fmt.Sprintf("Подготовил заявку на доступ: **%s** (уровень: %v). %v.", p.Title, p.Preview["level"], p.Preview["expected"])
+	text := fmt.Sprintf("Подготовил заявку на доступ: **%s**, уровень — %v. %v.", p.Title, p.Preview["level_name"], p.Preview["expected"])
 	return Reply{Text: text, Proposal: p, Answered: true}
 }
 
@@ -290,8 +324,8 @@ func (a *Agent) accessOverview(ctx context.Context, req Request) Reply {
 			pending = append(pending, name)
 		default:
 			label := name
-			if m["approval"] == "lead" {
-				label += " (согласует руководитель)"
+			if role, _ := m["approverRole"].(string); role != "" {
+				label += " (согласует " + role + ")"
 			}
 			missing = append(missing, label)
 			if len(sugg) < 3 {
@@ -300,7 +334,7 @@ func (a *Agent) accessOverview(ctx context.Context, req Request) Reply {
 		}
 	}
 	var b strings.Builder
-	b.WriteString("Базовый набор первой недели: VPN, Jira, Confluence команды и канал Tech-dep — выдаются сразу. Stash и пространство кластера согласует руководитель.\n")
+	b.WriteString("Базовый набор первой недели: VPN, Jira, Confluence команды и канал Tech-dep — выдаются сразу. Репозитории Stash согласует владелец проекта, пространство кластера — руководитель, тестовый Kubernetes — дежурный DevOps.\n")
 	if len(granted) > 0 {
 		b.WriteString("\n**Уже есть:** " + strings.Join(granted, ", "))
 	}
@@ -392,6 +426,27 @@ func (a *Agent) planReply(ctx context.Context, req Request) Reply {
 	r.Text = b.String()
 	r.Suggestions = append(r.Suggestions, "Открыть мой план")
 	return r
+}
+
+var goalStatusRu = map[domain.GoalStatus]string{domain.GoalAgreed: "согласована", domain.GoalInProgress: "в работе", domain.GoalDone: "выполнена"}
+
+func (a *Agent) goalsReply(ctx context.Context, req Request) Reply {
+	a.step(req, "tool", toolLabel("goals_get"))
+	goals, err := a.d.Goals(ctx, req.User)
+	if err != nil {
+		return Reply{Text: "Не получилось загрузить цели. Попробуй обновить страницу."}
+	}
+	if len(goals) == 0 {
+		return Reply{Text: "Цели стажировки пока не поставлены. На первой неделе их согласует с тобой руководитель вместе с критериями успеха — можешь сам предложить встречу.",
+			Answered: true, Suggestions: []string{"Кто мой руководитель?"}}
+	}
+	var b strings.Builder
+	b.WriteString("Твои цели на стажировку и критерии успеха:")
+	for _, g := range goals {
+		fmt.Fprintf(&b, "\n- **%s** — %s. Срок: %s, %s, прогресс %d%%.", g.Title, g.Metric, ruDate(g.Due), goalStatusRu[g.Status], g.Progress)
+	}
+	b.WriteString("\n\nПрогресс отмечай на странице «Мой план» — руководитель видит его без отдельных отчётов.")
+	return Reply{Text: b.String(), Answered: true, Suggestions: []string{"Открыть мой план"}}
 }
 
 func (a *Agent) whoReply(ctx context.Context, req Request) Reply {

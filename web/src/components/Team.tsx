@@ -26,6 +26,7 @@ export function Team() {
             <th scope="col">Стажёр</th>
             <th scope="col">День</th>
             <th scope="col">Прогресс</th>
+            <th scope="col">Цели</th>
             <th scope="col">Следующий шаг</th>
             <th scope="col">Вопросы</th>
           </tr>
@@ -48,6 +49,7 @@ export function Team() {
                 <div className="progress" aria-label={`${i.percent}%`}><span style={{ width: `${i.percent}%` }} /></div>
                 <span className="small">{i.done}/{i.total}{i.overdue > 0 && <span className="overdue-text">, просрочено {i.overdue}</span>}</span>
               </td>
+              <td className="small">{i.goalsTotal > 0 ? `${i.goalsDone} из ${i.goalsTotal}` : <span className="overdue-text">не поставлены</span>}</td>
               <td className="small">{i.nextStep ?? 'Всё выполнено'}</td>
               <td>{i.openQuestions > 0 ? <span className="tag overdue-tag">{i.openQuestions} без ответа</span> : <span className="muted">—</span>}</td>
             </tr>

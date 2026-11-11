@@ -18,6 +18,7 @@ export const keys = {
   insights: ['insights'] as const,
   internPlan: (id: string) => ['internPlan', id] as const,
   docs: ['docs'] as const,
+  goals: (internId = '') => ['goals', internId] as const,
   doc: (id: string) => ['doc', id] as const,
 };
 
@@ -81,6 +82,9 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
       if (p.success) qc.setQueryData(keys.plan, p.data);
       break;
     }
+    case 'goal':
+      void qc.invalidateQueries({ queryKey: ['goals'] });
+      break;
     case 'approval':
       void qc.invalidateQueries({ queryKey: keys.approvals });
       break;

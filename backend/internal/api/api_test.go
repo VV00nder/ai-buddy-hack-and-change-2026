@@ -59,7 +59,8 @@ func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 		s, err := e.st.StepStates(ctx, u.ID)
 		return tpl.Build(u, s, now()), err
 	}
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Now: now})
+	goals := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return e.st.Goals(ctx, u.ID) }
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now})
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.app = app.New(app.Config{CorpBaseURL: e.corpTS.URL, MsgRateLimit: 30},
 		app.Deps{Store: e.st, KV: kv.NewMemory(now), Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: events.NewHub(), Flags: ff, Now: now, Log: log})
@@ -247,15 +248,27 @@ func TestAccessAutoCompletesPlan(t *testing.T) {
 	e := newTestEnv(t, allOn(), "")
 	anna := e.login("anna")
 	maria := e.login("maria")
-	_, act := anna.ask("Запроси доступ к stash")
+	oleg := e.login("oleg")
+	_, act := anna.ask("Запроси доступ к stash search-api на запись")
 	var conf struct{ Action domain.Action }
 	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, &conf)
 	if conf.Action.Status != domain.ActionSubmitted {
 		t.Fatalf("stash pending: %+v", conf.Action)
 	}
+	// Stash согласует владелец проекта (Олег), а не руководитель
 	var ap struct{ Approvals []app.Approval }
 	maria.do("GET", "/api/approvals", nil, &ap)
-	maria.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil)
+	if len(ap.Approvals) != 0 {
+		t.Fatalf("lead must not get owner's approval: %+v", ap)
+	}
+	oleg.do("GET", "/api/approvals", nil, &ap)
+	if len(ap.Approvals) != 1 || ap.Approvals[0].Title != "Доступ: Stash: репозиторий — search-api, редактирование" {
+		t.Fatalf("owner approvals: %+v", ap)
+	}
+	if code := maria.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil); code != 403 {
+		t.Fatalf("lead decides owner's request: %d", code)
+	}
+	oleg.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil)
 	var p onboarding.Plan
 	anna.do("GET", "/api/plan", nil, &p)
 	if !stepDone(p, "w1-stash") {
@@ -467,7 +480,7 @@ func TestAuthAndValidation(t *testing.T) {
 	}
 	var du struct{ Users []domain.User }
 	c.do("GET", "/api/auth/demo-users", nil, &du)
-	if len(du.Users) != 7 {
+	if len(du.Users) != 8 {
 		t.Fatal("demo users")
 	}
 	anna := e.login("anna")
@@ -638,5 +651,204 @@ func TestAbsenceTitleInApprovals(t *testing.T) {
 	titles := ap.Approvals[0].Title + "|" + ap.Approvals[1].Title
 	if !strings.Contains(titles, "Отгул на 12.11 (чт), 1 раб. день") || !strings.Contains(titles, "Отгул 16.11 (пн)–17.11 (вт), 2 раб. дня") {
 		t.Fatalf("titles: %s", titles)
+	}
+}
+
+func TestDevopsApproval(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna := e.login("anna")
+	pavel := e.login("pavel")
+	if code := pavel.do("GET", "/api/approvals", nil, nil); code != 200 {
+		t.Fatal("engineer approvals")
+	}
+	if code := e.login("elena").do("GET", "/api/approvals", nil, nil); code != 403 {
+		t.Fatal("hrbp approvals")
+	}
+	_, act := anna.ask("нужен доступ к staging кластеру на редактирование для отладки индексатора поиска")
+	if act == nil {
+		t.Fatal("staging proposal")
+	}
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil)
+	var ap struct{ Approvals []app.Approval }
+	pavel.do("GET", "/api/approvals", nil, &ap)
+	if len(ap.Approvals) != 1 || !strings.Contains(ap.Approvals[0].Title, "Kubernetes: staging, редактирование") {
+		t.Fatalf("devops approvals: %+v", ap)
+	}
+	if code := pavel.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil); code != 200 {
+		t.Fatal("devops decide")
+	}
+	// инженер не согласует отсутствия
+	if code := pavel.do("POST", "/api/approvals/absence/ABS-1", map[string]any{"approve": true}, nil); code != 403 {
+		t.Fatalf("engineer absence: %d", code)
+	}
+}
+
+func TestCronReminders(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	srv := New(e.app, nil, nil, "", false)
+	srv.CronToken = "tok"
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	run := func(token string) (int, app.ReminderReport) {
+		req, _ := http.NewRequest("POST", ts.URL+"/api/cron/reminders", nil)
+		req.Header.Set("X-Cron-Token", token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var rep app.ReminderReport
+		_ = json.NewDecoder(resp.Body).Decode(&rep)
+		return resp.StatusCode, rep
+	}
+	if code, _ := run("bad"); code != 403 {
+		t.Fatal("token")
+	}
+	anna := e.login("anna")
+	// заявка и вопрос, которые «зависнут»
+	_, act := anna.ask("отгул в пятницу")
+	anna.do("POST", "/api/actions/"+act.ID+"/confirm", nil, nil)
+	_, q := anna.ask("Где посмотреть тестовый стенд поиска?")
+	anna.do("POST", "/api/actions/"+q.ID+"/confirm", nil, nil)
+	code, rep := run("tok")
+	if code != 200 || rep.Digests != 2 || rep.StaleRequests != 0 { // Анна и Иван получили сводку
+		t.Fatalf("first run: %d %+v", code, rep)
+	}
+	if _, rep = run("tok"); rep.Digests != 0 {
+		t.Fatal("digest once a day")
+	}
+	// прошло двое суток: напоминаем согласующему и наставнику
+	e.clock = e.clock.Add(49 * time.Hour)
+	_, rep = run("tok")
+	if rep.StaleRequests != 1 || rep.OpenQuestions != 1 || rep.Digests != 2 {
+		t.Fatalf("stale: %+v", rep)
+	}
+	maria := e.login("maria")
+	var n struct{ Notifications []domain.Notification }
+	maria.do("GET", "/api/notifications", nil, &n)
+	if !strings.Contains(n.Notifications[0].Text, "ждёт решения 2 дн.") {
+		t.Fatalf("lead reminder: %+v", n.Notifications)
+	}
+	anna = e.login("anna")
+	var st chatState
+	anna.do("GET", "/api/messages", nil, &st)
+	last := st.Messages[len(st.Messages)-1]
+	if last.Mode != "proactive" || !strings.Contains(last.Text, "Доброе утро, Анна") || !strings.Contains(last.Text, "Начинается этап") && !strings.Contains(last.Text, "Следующий шаг") {
+		t.Fatalf("digest: %+v", last)
+	}
+	// флаг выключен
+	off := allOn()
+	off.Proactive = false
+	e2 := newTestEnv(t, off, "")
+	if _, err := e2.app.RunReminders(context.Background()); err == nil {
+		t.Fatal("flag off")
+	}
+	e2.app.StartReminders(context.Background(), time.Millisecond) // выключено флагом — ничего не запускает
+	ctx, cancel := context.WithCancel(context.Background())
+	e.app.StartReminders(ctx, 5*time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+}
+
+func TestGoals(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	anna, maria, oleg, ivan := e.login("anna"), e.login("maria"), e.login("oleg"), e.login("ivan")
+	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "пока не поставлены") {
+		t.Fatalf("no goals: %s", m.Text)
+	}
+	in := map[string]any{"internId": "u-anna", "title": "Закрыть первую задачу SEARCH-101", "metric": "MR прошёл ревью и выкачен на staging", "due": "2026-11-24"}
+	var out struct{ Goal domain.Goal }
+	if code := anna.do("POST", "/api/goals", in, nil); code != 403 {
+		t.Fatal("intern cannot set goals")
+	}
+	if code := e.login("sergey").do("POST", "/api/goals", in, nil); code != 403 {
+		t.Fatal("foreign lead")
+	}
+	for k, v := range map[string]any{"title": "x", "metric": "y", "due": "завтра"} {
+		bad := map[string]any{}
+		for kk, vv := range in {
+			bad[kk] = vv
+		}
+		bad[k] = v
+		if code := maria.do("POST", "/api/goals", bad, nil); code != 400 {
+			t.Fatalf("validation %s", k)
+		}
+	}
+	if code := maria.do("POST", "/api/goals", map[string]any{"internId": "u-maria"}, nil); code != 404 {
+		t.Fatal("goal for non-intern")
+	}
+	if code := maria.do("POST", "/api/goals", in, &out); code != 201 || out.Goal.Status != domain.GoalAgreed {
+		t.Fatalf("add: %d %+v", code, out)
+	}
+	in["title"] = "Разобраться в архитектуре поиска"
+	oleg.do("POST", "/api/goals", in, nil) // наставник тоже может
+	var p onboarding.Plan
+	anna.do("GET", "/api/plan", nil, &p)
+	if !stepDone(p, "w1-goals") {
+		t.Fatal("w1-goals must be auto-completed")
+	}
+	var list struct{ Goals []domain.Goal }
+	anna.do("GET", "/api/goals", nil, &list)
+	if len(list.Goals) != 2 {
+		t.Fatalf("list: %+v", list)
+	}
+	if code := maria.do("GET", "/api/goals?internId=u-anna", nil, &list); code != 200 || len(list.Goals) != 2 {
+		t.Fatal("lead view")
+	}
+	if code := ivan.do("GET", "/api/goals?internId=u-anna", nil, nil); code != 403 {
+		t.Fatal("foreign intern view")
+	}
+	if code := anna.do("GET", "/api/goals?internId=ghost", nil, nil); code != 404 {
+		t.Fatal("unknown intern")
+	}
+	id := out.Goal.ID
+	p50, note := 50, "Код готов, жду ревью"
+	if code := anna.do("PATCH", "/api/goals/"+id, map[string]any{"progress": p50, "note": note}, &out); code != 200 || out.Goal.Status != domain.GoalInProgress || out.Goal.Note != note {
+		t.Fatalf("progress: %+v", out.Goal)
+	}
+	for _, bad := range []map[string]any{{"progress": 120}, {"status": "lost"}, {"note": strings.Repeat("я", 501)}} {
+		if code := anna.do("PATCH", "/api/goals/"+id, bad, nil); code != 400 {
+			t.Fatalf("bad update %v", bad)
+		}
+	}
+	if code := ivan.do("PATCH", "/api/goals/"+id, map[string]any{"status": "done"}, nil); code != 403 {
+		t.Fatal("foreign update")
+	}
+	if code := anna.do("PATCH", "/api/goals/none", map[string]any{"status": "done"}, nil); code != 404 {
+		t.Fatal("unknown goal")
+	}
+	anna.do("PATCH", "/api/goals/"+id, map[string]any{"status": "done"}, &out)
+	if out.Goal.Progress != 100 {
+		t.Fatal("done = 100%")
+	}
+	var n struct{ Notifications []domain.Notification }
+	maria.do("GET", "/api/notifications", nil, &n)
+	if !strings.Contains(n.Notifications[0].Text, "отметил(а) цель выполненной") {
+		t.Fatalf("lead notified: %+v", n.Notifications)
+	}
+	var team struct{ Interns []app.InternSummary }
+	maria.do("GET", "/api/team", nil, &team)
+	if team.Interns[0].GoalsTotal != 2 || team.Interns[0].GoalsDone != 1 {
+		t.Fatalf("team goals: %+v", team.Interns[0])
+	}
+	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "SEARCH-101") || !strings.Contains(m.Text, "выполнена") {
+		t.Fatalf("goals in chat: %s", m.Text)
+	}
+	// стартовые цели не перезаписывают существующие
+	seed := map[string][]app.GoalInput{"u-anna": {{Title: "x", Metric: "y", Due: "2026-12-01"}}, "u-ivan": {{Title: "Цель Ивана", Metric: "критерий", Due: "2026-12-01"}}}
+	if err := e.app.SeedGoals(context.Background(), seed, map[string]string{"u-ivan": "u-sergey"}); err != nil {
+		t.Fatal(err)
+	}
+	ivan.do("GET", "/api/goals", nil, &list)
+	if len(list.Goals) != 1 {
+		t.Fatal("seed ivan")
+	}
+	ivan.do("GET", "/api/plan", nil, &p)
+	if !stepDone(p, "w1-goals") {
+		t.Fatal("seed marks w1-goals")
+	}
+	anna.do("GET", "/api/goals", nil, &list)
+	if len(list.Goals) != 2 {
+		t.Fatal("seed must not touch anna")
 	}
 }

@@ -1,29 +1,251 @@
 {
   "_comment": "Синтетические данные. Все имена и контакты вымышлены.",
   "teams": [
-    {"id": "search", "name": "Поиск объявлений", "cluster": "Marketplace Core", "chat": "#search-team", "curator": "Ксения Лебедева (@kseniya-curator)"},
-    {"id": "delivery", "name": "Авито Доставка: трекинг", "cluster": "Delivery", "chat": "#delivery-tracking", "curator": "Ксения Лебедева (@kseniya-curator)"}
+    {
+      "id": "search",
+      "name": "Поиск объявлений",
+      "cluster": "Marketplace Core",
+      "chat": "#search-team",
+      "curator": "Ксения Лебедева (@kseniya-curator)"
+    },
+    {
+      "id": "delivery",
+      "name": "Авито Доставка: трекинг",
+      "cluster": "Delivery",
+      "chat": "#delivery-tracking",
+      "curator": "Ксения Лебедева (@kseniya-curator)"
+    },
+    {
+      "id": "platform",
+      "name": "Платформа: эксплуатация",
+      "cluster": "Platform",
+      "chat": "#platform-duty",
+      "curator": "—"
+    }
   ],
   "users": [
-    {"id": "u-anna",  "login": "anna",  "name": "Анна Смирнова",  "role": "intern", "team": "search",   "track": "backend", "mentorId": "u-oleg", "leadId": "u-maria", "startOffsetDays": -3, "handle": "@anna-s"},
-    {"id": "u-ivan",  "login": "ivan",  "name": "Иван Петров",    "role": "intern", "team": "delivery", "track": "backend", "mentorId": "u-dmitry", "leadId": "u-sergey", "startOffsetDays": -24, "handle": "@ivan-p"},
-    {"id": "u-oleg",  "login": "oleg",  "name": "Олег Кузнецов",  "role": "mentor", "team": "search",   "leadId": "u-maria", "startOffsetDays": -900, "handle": "@oleg-k"},
-    {"id": "u-maria", "login": "maria", "name": "Мария Волкова",  "role": "lead",   "team": "search",   "startOffsetDays": -1500, "handle": "@maria-v"},
-    {"id": "u-dmitry","login": "dmitry","name": "Дмитрий Орлов",  "role": "mentor", "team": "delivery", "leadId": "u-sergey", "startOffsetDays": -700, "handle": "@dmitry-o"},
-    {"id": "u-sergey","login": "sergey","name": "Сергей Новиков", "role": "lead",   "team": "delivery", "startOffsetDays": -2000, "handle": "@sergey-n"},
-    {"id": "u-elena", "login": "elena", "name": "Елена Соколова", "role": "hrbp",   "team": "search",   "startOffsetDays": -1200, "handle": "@elena-hr"}
+    {
+      "id": "u-anna",
+      "login": "anna",
+      "name": "Анна Смирнова",
+      "role": "intern",
+      "team": "search",
+      "track": "backend",
+      "mentorId": "u-oleg",
+      "leadId": "u-maria",
+      "startOffsetDays": -3,
+      "handle": "@anna-s"
+    },
+    {
+      "id": "u-ivan",
+      "login": "ivan",
+      "name": "Иван Петров",
+      "role": "intern",
+      "team": "delivery",
+      "track": "backend",
+      "mentorId": "u-dmitry",
+      "leadId": "u-sergey",
+      "startOffsetDays": -24,
+      "handle": "@ivan-p"
+    },
+    {
+      "id": "u-oleg",
+      "login": "oleg",
+      "name": "Олег Кузнецов",
+      "role": "mentor",
+      "team": "search",
+      "leadId": "u-maria",
+      "startOffsetDays": -900,
+      "handle": "@oleg-k"
+    },
+    {
+      "id": "u-maria",
+      "login": "maria",
+      "name": "Мария Волкова",
+      "role": "lead",
+      "team": "search",
+      "startOffsetDays": -1500,
+      "handle": "@maria-v"
+    },
+    {
+      "id": "u-dmitry",
+      "login": "dmitry",
+      "name": "Дмитрий Орлов",
+      "role": "mentor",
+      "team": "delivery",
+      "leadId": "u-sergey",
+      "startOffsetDays": -700,
+      "handle": "@dmitry-o"
+    },
+    {
+      "id": "u-sergey",
+      "login": "sergey",
+      "name": "Сергей Новиков",
+      "role": "lead",
+      "team": "delivery",
+      "startOffsetDays": -2000,
+      "handle": "@sergey-n"
+    },
+    {
+      "id": "u-elena",
+      "login": "elena",
+      "name": "Елена Соколова",
+      "role": "hrbp",
+      "team": "search",
+      "startOffsetDays": -1200,
+      "handle": "@elena-hr"
+    },
+    {
+      "id": "u-pavel",
+      "login": "pavel",
+      "name": "Павел Егоров",
+      "role": "engineer",
+      "team": "platform",
+      "startOffsetDays": -1100,
+      "handle": "@pavel-devops"
+    }
   ],
-  "absenceBalance": {"intern": 3, "default": 5},
+  "absenceBalance": {
+    "intern": 3,
+    "default": 5
+  },
   "accessCatalog": [
-    {"id": "vpn", "name": "VPN", "description": "Удалённый доступ к внутренней сети", "approval": "auto", "levels": ["user"]},
-    {"id": "jira", "name": "Jira", "description": "Трекер задач команды", "approval": "auto", "levels": ["user"]},
-    {"id": "confluence-team", "name": "Confluence: пространство команды", "description": "Документация и договорённости команды", "approval": "auto", "levels": ["read", "write"]},
-    {"id": "confluence-cluster", "name": "Confluence: пространство кластера", "description": "Документация кластера, архитектура сервисов", "approval": "lead", "levels": ["read"]},
-    {"id": "channel-tech-dep", "name": "Канал Tech-dep", "description": "Общий канал технического департамента", "approval": "auto", "levels": ["member"]},
-    {"id": "stash", "name": "Stash: репозитории команды", "description": "Git-репозитории сервисов команды", "approval": "lead", "levels": ["read", "write"]},
-    {"id": "grafana", "name": "Grafana", "description": "Дашборды и метрики сервисов", "approval": "auto", "levels": ["viewer"]},
-    {"id": "sentry", "name": "Sentry", "description": "Ошибки и исключения сервисов", "approval": "auto", "levels": ["member"]},
-    {"id": "redash", "name": "Redash", "description": "Аналитические запросы к данным", "approval": "lead", "levels": ["viewer"], "justificationRequired": true},
-    {"id": "k8s-prod", "name": "Kubernetes: продовые кластеры", "description": "Управление продовыми кластерами", "approval": "lead", "levels": ["admin"], "deniedRoles": ["intern"], "deniedHint": "Стажёрам доступ к продовым кластерам не выдаётся. Для отладки используйте staging-кластер через LENS — доступ к нему есть у всех инженеров команды."}
-  ]
+    {
+      "id": "vpn",
+      "name": "VPN",
+      "description": "Удалённый доступ к внутренней сети",
+      "approval": "auto",
+      "levels": [
+        "read"
+      ]
+    },
+    {
+      "id": "jira",
+      "name": "Jira",
+      "description": "Трекер задач команды",
+      "approval": "auto",
+      "levels": [
+        "edit"
+      ]
+    },
+    {
+      "id": "confluence-team",
+      "name": "Confluence: пространство команды",
+      "description": "Документация и договорённости команды",
+      "approval": "auto",
+      "levels": [
+        "read",
+        "edit"
+      ]
+    },
+    {
+      "id": "confluence-cluster",
+      "name": "Confluence: пространство кластера",
+      "description": "Документация кластера, архитектура сервисов",
+      "approval": "lead",
+      "levels": [
+        "read"
+      ]
+    },
+    {
+      "id": "channel-tech-dep",
+      "name": "Канал Tech-dep",
+      "description": "Общий канал технического департамента",
+      "approval": "auto",
+      "levels": [
+        "read"
+      ]
+    },
+    {
+      "id": "stash",
+      "name": "Stash: репозиторий",
+      "description": "Git-репозиторий сервиса. Нужно указать проект",
+      "approval": "owner",
+      "levels": [
+        "read",
+        "edit",
+        "admin"
+      ],
+      "projects": {
+        "search": [
+          "search-api",
+          "search-indexer",
+          "search-web"
+        ],
+        "delivery": [
+          "delivery-tracking"
+        ]
+      },
+      "deniedLevels": {
+        "intern": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "description": "Дашборды и метрики сервисов",
+      "approval": "auto",
+      "levels": [
+        "read"
+      ]
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "description": "Ошибки и исключения сервисов",
+      "approval": "auto",
+      "levels": [
+        "read"
+      ]
+    },
+    {
+      "id": "redash",
+      "name": "Redash",
+      "description": "Аналитические запросы к данным",
+      "approval": "lead",
+      "levels": [
+        "read"
+      ],
+      "justificationRequired": true
+    },
+    {
+      "id": "k8s-staging",
+      "name": "Kubernetes: staging",
+      "description": "Тестовый кластер для отладки сервисов команды",
+      "approval": "devops",
+      "levels": [
+        "read",
+        "edit"
+      ],
+      "justificationRequired": true
+    },
+    {
+      "id": "k8s-prod",
+      "name": "Kubernetes: продовые кластеры",
+      "description": "Управление продовыми кластерами",
+      "approval": "devops",
+      "levels": [
+        "read",
+        "admin"
+      ],
+      "deniedRoles": [
+        "intern"
+      ],
+      "deniedHint": "Стажёрам доступ к продовым кластерам не выдаётся. Для отладки запроси Kubernetes: staging — его согласует дежурный DevOps."
+    }
+  ],
+  "approverRoles": {
+    "lead": "руководитель",
+    "owner": "владелец проекта",
+    "devops": "дежурный DevOps"
+  },
+  "devopsDuty": "u-pavel",
+  "projectOwners": {
+    "search-api": "u-oleg",
+    "search-indexer": "u-oleg",
+    "search-web": "u-maria",
+    "delivery-tracking": "u-dmitry"
+  }
 }

@@ -15,6 +15,10 @@
 | Заявка на отгул | [003](003-absence-request/spec.md) | `corp/absence.go`, `agent/actions.go`, `app/actions.go` | `corp_test.go: TestAbsenceRules`, `api_test.go: TestInternDayOffEndToEnd` |
 | Заявка на доступ | [004](004-access-request/spec.md) | `corp/access.go`, `agent/offline.go` | `corp_test.go: TestAccess`, `agent_test.go: TestOfflineAccessScenario` |
 | Вопрос наставнику и база ответов | [005](005-mentor-escalation/spec.md) | `app/team.go`, `web/src/components/Inbox.tsx` | `api_test.go: TestMentorQuestionAndFAQ` |
+| Цели стажировки (трекер прогресса) | [006](006-goals/spec.md) | `app/goals.go`, `web/src/components/Goals.tsx` | `api_test.go: TestGoals`, `agent_test.go: TestGoalsIntent` |
+| Проактивные напоминания (ИИ-крон) | [007](007-proactive/spec.md) | `app/cron.go` | `api_test.go: TestCronReminders` |
 | Поведение агента | [agent](agent/agent-spec.md) | `backend/internal/agent` | `agent_test.go` (офлайн и LLM-режим) |
 
-Сквозной сценарий всех фич — `e2e/demo.mjs` (12 проверок, он же записывает видео).
+Сквозной сценарий всех фич — `e2e/demo.mjs` (17 проверок, он же записывает видео).
+
+Спецификации 004, 006 и 007 уточнены по ответам экспертов Авито в чате трека (10.11.2026): состав заявки на доступ и согласующие по типу ресурса, цели стажировки, имитация ИИ-крона.

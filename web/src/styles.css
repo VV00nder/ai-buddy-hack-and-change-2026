@@ -138,6 +138,7 @@ textarea { resize: vertical; }
 .bubble.assistant { align-self: flex-start; display: grid; gap: 10px; padding-left: 14px; border-left: 3px solid var(--buddy); }
 .bubble.assistant.from-mentor { border-left-color: var(--go); }
 .bubble.assistant.failed { border-left-color: var(--alert); }
+.bubble.assistant.proactive { border-left-style: dashed; }
 .md p + p, .md p + ul, .md ul + p, .md p + ol, .md ol + p { margin-top: 8px; }
 .md ul { list-style: disc; padding-left: 20px; }
 .md ol { list-style: decimal; padding-left: 20px; }
@@ -238,6 +239,20 @@ textarea { resize: vertical; }
 .step-note { color: var(--buddy); }
 .step-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
 
+/* Цели */
+.goals { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 16px 18px; display: grid; gap: 12px; }
+.goals-head { display: flex; align-items: baseline; gap: 10px; }
+.goals-head h3 { font-size: 17px; }
+.goal-list { display: grid; gap: 10px; }
+.goal { display: flex; gap: 16px; justify-content: space-between; padding: 10px 12px; border-radius: var(--radius-s); background: var(--surface); }
+.goal-done .goal-title { color: var(--muted); text-decoration: line-through; }
+.goal-main { display: grid; gap: 2px; }
+.goal-title { font-weight: 650; }
+.goal-side { display: grid; gap: 4px; justify-items: end; flex: none; min-width: 200px; }
+.goal-progress { display: flex; align-items: center; gap: 8px; }
+.goal-progress input { width: 130px; accent-color: var(--go); padding: 0; border: 0; }
+.add-goal { display: grid; grid-template-columns: 1.3fr 1.3fr 0.7fr auto; gap: 8px; align-items: end; }
+
 /* Инструкции */
 .kb { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; max-width: 1080px; }
 .kb-list ul { display: grid; gap: 2px; margin-top: 10px; }
@@ -311,5 +326,8 @@ textarea { resize: vertical; }
   .team td { display: block; border: 0; padding: 4px 0; }
   .team tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .note-fields { grid-template-columns: 1fr; }
+  .goal { flex-direction: column; }
+  .goal-side { justify-items: start; }
+  .add-goal { grid-template-columns: 1fr; }
   .saved { flex-direction: column; align-items: flex-start; }
 }

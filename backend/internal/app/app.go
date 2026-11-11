@@ -69,6 +69,9 @@ type App struct {
 	log   *slog.Logger
 	http  *http.Client
 
+	cronMu   sync.Mutex
+	cronSent map[string]string
+
 	stampMu   sync.Mutex
 	lastStamp time.Time
 
@@ -113,7 +116,7 @@ func New(cfg Config, d Deps) *App {
 		d.Log = slog.Default()
 	}
 	return &App{cfg: cfg, store: d.Store, kv: d.KV, corp: d.Corp, kb: d.KB, tpl: d.Tpl, agent: d.Agent, hub: d.Hub,
-		flags: d.Flags, now: d.Now, log: d.Log, http: &http.Client{Timeout: 10 * time.Second}, metrics: NewMetrics()}
+		flags: d.Flags, now: d.Now, log: d.Log, http: &http.Client{Timeout: 10 * time.Second}, metrics: NewMetrics(), cronSent: map[string]string{}}
 }
 
 // Hub возвращает хаб обновлений.

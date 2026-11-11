@@ -54,7 +54,11 @@ func simple(f func(identity.Claims, idArgs) (map[string]any, error)) mcp.Handler
 	}
 }
 
-var leads = []string{string(domain.RoleLead)}
+var (
+	leads = []string{string(domain.RoleLead)}
+	// approvers — роли, которые могут быть согласующими доступов; конкретного согласующего проверяет сервис.
+	approvers = []string{string(domain.RoleLead), string(domain.RoleMentor), string(domain.RoleEngineer)}
+)
 
 // MCPServer публикует корпоративные сервисы как MCP-инструменты.
 func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
@@ -103,7 +107,9 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Catalog(c) })},
 		{Info: mcp.ToolInfo{Name: "access_request", Title: "Заявка на доступ",
 			Description: "Запросить доступ к системе из каталога. С dry_run=true только проверяет заявку.",
-			InputSchema: schema(map[string]any{"system": str("ID системы из каталога"), "level": str("Уровень доступа"),
+			InputSchema: schema(map[string]any{"system": str("ID системы из каталога"),
+				"project":       str("Проект (для систем с проектами, например репозиторий Stash)"),
+				"level":         str("Уровень прав: read — чтение, edit — редактирование, admin — администрирование", "read", "edit", "admin"),
 				"justification": str("Для какой задачи нужен доступ"), "dry_run": dryRun}, "system")},
 			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
 				in, err := decode[AccessInput](raw)
@@ -115,9 +121,9 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 		{Info: mcp.ToolInfo{Name: "access_list", Title: "Мои заявки на доступ", Description: "Список заявок на доступ.",
 			InputSchema: schema(map[string]any{"scope": scope}), Annotations: map[string]any{"readOnlyHint": true}},
 			Handler: simple(func(c identity.Claims, a idArgs) (map[string]any, error) { return s.ListAccess(c, a.Scope) })},
-		{Info: mcp.ToolInfo{Name: "access_decide", Title: "Решение по доступу", Description: "Выдать или отклонить доступ (руководитель).",
+		{Info: mcp.ToolInfo{Name: "access_decide", Title: "Решение по доступу", Description: "Выдать или отклонить доступ (согласующий: руководитель, владелец проекта или DevOps).",
 			InputSchema: schema(map[string]any{"id": str("ID заявки"), "decision": str("Решение", "granted", "rejected"), "comment": str("Комментарий")}, "id", "decision")},
-			Roles: leads,
+			Roles: approvers,
 			Handler: simple(func(c identity.Claims, a idArgs) (map[string]any, error) {
 				return s.DecideAccess(c, a.ID, a.Decision, a.Comment)
 			})},

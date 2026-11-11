@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Action } from '../api/schemas';
 import { useCancel, useConfirm } from '../hooks/queries';
-import { dayMonth, kindName, stampText } from '../lib/format';
+import { dayMonth, kindName, levelName, stampText } from '../lib/format';
 
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
@@ -13,7 +13,7 @@ export function editableFields(a: Action): { key: string; label: string; type: '
       { key: 'date_to', label: 'По', type: 'date' },
       { key: 'reason', label: 'Причина (по желанию)', type: 'text' },
     ];
-  if (a.kind === 'access') return a.preview.approval === 'auto' ? [] : [{ key: 'justification', label: 'Для какой задачи (увидит руководитель)', type: 'text' }];
+  if (a.kind === 'access') return a.preview.approval === 'auto' ? [] : [{ key: 'justification', label: 'Для какой задачи (увидит согласующий)', type: 'text' }];
   return [{ key: 'question', label: 'Вопрос', type: 'textarea' }];
 }
 
@@ -27,8 +27,11 @@ export function facts(a: Action): [string, string][] {
     if (p.balance_after != null && a.status === 'proposed') out.push(['Останется отгулов', str(p.balance_after)]);
     if (p.comment) out.push(['Комментарий', str(p.comment)]);
   } else if (a.kind === 'access') {
-    out.push(['Уровень', str(p.level ?? a.args.level ?? '')]);
-    if (p.expected && a.status === 'proposed') out.push(['Как выдаётся', str(p.expected)]);
+    if (p.project) out.push(['Проект', str(p.project)]);
+    const lvl = str(p.level ?? a.args.level ?? '');
+    out.push(['Уровень', levelName[lvl] ?? lvl]);
+    if (p.approver) out.push(['Согласует', p.approver_role ? `${str(p.approver)}, ${str(p.approver_role)}` : str(p.approver)]);
+    if (p.approval === 'auto' && a.status === 'proposed') out.push(['Как выдаётся', 'Сразу после отправки']);
     if (p.comment) out.push(['Комментарий', str(p.comment)]);
   } else {
     if (p.mentor) out.push(['Кому', str(p.mentor)]);

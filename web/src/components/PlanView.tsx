@@ -4,6 +4,7 @@ import type { Plan, StepStatus, StepView } from '../api/schemas';
 import { keys, usePlan, useSend, useSetStep } from '../hooks/queries';
 import { dayMonth, stepStatusName } from '../lib/format';
 import { useUi } from '../store/ui';
+import { Goals } from './Goals';
 
 /** План стажёра. Без internId — свой план; с internId — план стажёра для наставника/руководителя. */
 export function PlanView({ internId }: { internId?: string }) {
@@ -32,6 +33,7 @@ export function PlanBody({ plan, internId, internName }: { plan: Plan; internId?
           <span>{plan.percent}%</span>
         </div>
       </header>
+      <Goals internId={internId} canAdd={!!internId} />
       <ol className="periods">
         {plan.periods.map((per) => (
           <li key={per.id} className={`period period-${per.state}`}>

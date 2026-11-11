@@ -49,7 +49,7 @@ func toolCode(err error) string {
 
 func TestDirectory(t *testing.T) {
 	s := newSvc(t)
-	if len(s.Users()) != 7 {
+	if len(s.Users()) != 8 {
 		t.Fatal("users")
 	}
 	anna := claims(s, "anna")
@@ -178,18 +178,28 @@ func TestAccess(t *testing.T) {
 	anna := claims(s, "anna")
 	cat, _ := s.Catalog(anna)
 	items := cat["items"].([]map[string]any)
-	if len(items) != 10 {
+	if len(items) != 11 {
 		t.Fatalf("catalog: %d", len(items))
 	}
 	for _, it := range items {
-		if it["id"] == "k8s-prod" && it["available"] != false {
-			t.Fatal("k8s must be unavailable for intern")
+		switch it["id"] {
+		case "k8s-prod":
+			if it["available"] != false {
+				t.Fatal("k8s-prod must be unavailable for intern")
+			}
+		case "stash":
+			if it["approverRole"] != "владелец проекта" || len(it["projects"].([]string)) != 3 {
+				t.Fatalf("stash: %v", it)
+			}
 		}
 	}
 	cases := map[string]AccessInput{
 		"unknown_system":         {System: "nope"},
 		"not_allowed_for_role":   {System: "k8s-prod"},
-		"bad_level":              {System: "stash", Level: "admin"},
+		"bad_level":              {System: "vpn", Level: "admin"},
+		"level_not_allowed":      {System: "stash", Project: "search-api", Level: "admin"},
+		"project_required":       {System: "stash", Level: "edit"},
+		"unknown_project":        {System: "stash", Project: "delivery-tracking"},
 		"justification_required": {System: "redash", Justification: "надо"},
 	}
 	for code, in := range cases {
@@ -200,24 +210,34 @@ func TestAccess(t *testing.T) {
 	if _, err := s.RequestAccess(identity.Claims{Sub: "x"}, AccessInput{System: "vpn"}); toolCode(err) != "unknown_user" {
 		t.Fatal("unknown user")
 	}
-	r, err := s.RequestAccess(anna, AccessInput{System: "grafana"})
-	if err != nil || r["status"] != "granted" {
+	r, err := s.RequestAccess(anna, AccessInput{System: "grafana", Project: "ignored"})
+	if err != nil || r["status"] != "granted" || r["project"] != nil {
 		t.Fatalf("auto: %v %v", r, err)
 	}
 	if _, err := s.RequestAccess(anna, AccessInput{System: "grafana"}); toolCode(err) != "duplicate" {
 		t.Fatal("dup granted")
 	}
-	dry, err := s.RequestAccess(anna, AccessInput{System: "stash", Level: "write", DryRun: true})
-	if err != nil || dry["status"] != "valid" || dry["approver"] != "Мария Волкова" {
+	// Stash: согласует владелец проекта
+	dry, err := s.RequestAccess(anna, AccessInput{System: "stash", Project: "Search-API", Level: "edit", DryRun: true})
+	if err != nil || dry["status"] != "valid" || dry["approver"] != "Олег Кузнецов" || dry["approver_role"] != "владелец проекта" || dry["level_name"] != "редактирование" {
 		t.Fatalf("dry: %v %v", dry, err)
 	}
-	r, err = s.RequestAccess(anna, AccessInput{System: "stash", Level: "write"})
+	r, err = s.RequestAccess(anna, AccessInput{System: "stash", Project: "search-api", Level: "edit"})
 	if err != nil || r["status"] != "pending" {
 		t.Fatalf("pending: %v %v", r, err)
 	}
 	id := r["id"].(string)
-	if _, err := s.RequestAccess(anna, AccessInput{System: "stash"}); toolCode(err) != "duplicate" {
-		t.Fatal("dup pending")
+	if _, err := s.RequestAccess(anna, AccessInput{System: "stash", Project: "search-api"}); toolCode(err) != "duplicate" {
+		t.Fatal("dup pending same project")
+	}
+	// другой проект — отдельная заявка, владелец другой
+	if r2, err := s.RequestAccess(anna, AccessInput{System: "stash", Project: "search-web", DryRun: true}); err != nil || r2["approver"] != "Мария Волкова" {
+		t.Fatalf("other project owner: %v %v", r2, err)
+	}
+	// Kubernetes staging — дежурный DevOps
+	k, err := s.RequestAccess(anna, AccessInput{System: "k8s-staging", Level: "edit", Justification: "Отладка индексатора поиска на стенде", DryRun: true})
+	if err != nil || k["approver"] != "Павел Егоров" || k["approver_role"] != "дежурный DevOps" {
+		t.Fatalf("devops: %v %v", k, err)
 	}
 	cat, _ = s.Catalog(anna)
 	for _, it := range cat["items"].([]map[string]any) {
@@ -225,23 +245,26 @@ func TestAccess(t *testing.T) {
 			t.Fatal("my status")
 		}
 	}
-	maria := claims(s, "maria")
-	if l, _ := s.ListAccess(maria, "approvals"); len(l["items"].([]AccessRequest)) != 1 {
-		t.Fatal("approvals")
+	oleg, maria := claims(s, "oleg"), claims(s, "maria")
+	if l, _ := s.ListAccess(oleg, "approvals"); len(l["items"].([]AccessRequest)) != 1 {
+		t.Fatal("owner approvals")
 	}
-	if _, err := s.DecideAccess(claims(s, "sergey"), id, "granted", ""); toolCode(err) != "forbidden" {
-		t.Fatal("foreign lead")
+	if l, _ := s.ListAccess(maria, "approvals"); len(l["items"].([]AccessRequest)) != 0 {
+		t.Fatal("lead must not see owner's approvals")
 	}
-	if _, err := s.DecideAccess(maria, id, "ok", ""); toolCode(err) != "bad_decision" {
+	if _, err := s.DecideAccess(maria, id, "granted", ""); toolCode(err) != "forbidden" {
+		t.Fatal("not the approver")
+	}
+	if _, err := s.DecideAccess(oleg, id, "ok", ""); toolCode(err) != "bad_decision" {
 		t.Fatal("bad decision")
 	}
-	if _, err := s.DecideAccess(maria, "none", "granted", ""); toolCode(err) != "not_found" {
+	if _, err := s.DecideAccess(oleg, "none", "granted", ""); toolCode(err) != "not_found" {
 		t.Fatal("not found")
 	}
-	if d, err := s.DecideAccess(maria, id, "granted", "ok"); err != nil || d["status"] != "granted" {
+	if d, err := s.DecideAccess(oleg, id, "granted", "ok"); err != nil || d["status"] != "granted" {
 		t.Fatalf("decide: %v %v", d, err)
 	}
-	if _, err := s.DecideAccess(maria, id, "granted", ""); toolCode(err) != "already_decided" {
+	if _, err := s.DecideAccess(oleg, id, "granted", ""); toolCode(err) != "already_decided" {
 		t.Fatal("already")
 	}
 	if l, _ := s.ListAccess(anna, "mine"); len(l["items"].([]AccessRequest)) != 2 {
@@ -249,6 +272,22 @@ func TestAccess(t *testing.T) {
 	}
 	if _, err := s.RequestAccess(anna, AccessInput{System: "redash", Justification: "Посчитать метрики поиска для задачи SEARCH-101"}); err != nil {
 		t.Fatal(err)
+	}
+	// руководитель не может получить admin без обоснования
+	if _, err := s.RequestAccess(maria, AccessInput{System: "stash", Project: "search-api", Level: "admin"}); toolCode(err) != "justification_required" {
+		t.Fatal("admin needs justification")
+	}
+	// без владельца проекта согласует руководитель
+	s.owners = map[string]string{}
+	if r, _ := s.RequestAccess(anna, AccessInput{System: "stash", Project: "search-indexer", DryRun: true}); r["approver"] != "Мария Волкова" {
+		t.Fatalf("fallback to lead: %v", r)
+	}
+	s.devops = "nobody"
+	if _, err := s.RequestAccess(anna, AccessInput{System: "k8s-staging", Justification: "Отладка индексатора поиска на стенде"}); toolCode(err) != "no_approver" {
+		t.Fatal("no approver")
+	}
+	if levelsRu([]string{"read", "edit"}) != "чтение (read), редактирование (edit)" {
+		t.Fatal(levelsRu([]string{"read", "edit"}))
 	}
 }
 
@@ -314,7 +353,7 @@ func TestHTTPAndMCP(t *testing.T) {
 	c := mcp.NewClient(ts.URL+"/mcp", time.Second)
 	ctx := context.Background()
 	tools, err := c.ListTools(ctx, tok.Token)
-	if err != nil || len(tools) != 10 { // intern не видит *_decide
+	if err != nil || len(tools) != 10 { // стажёр не видит *_decide
 		t.Fatalf("tools: %d %v", len(tools), err)
 	}
 	calls := []struct {
@@ -325,6 +364,7 @@ func TestHTTPAndMCP(t *testing.T) {
 		{"absence_create", map[string]any{"date_from": "2026-11-13", "dry_run": true}},
 		{"absence_list", map[string]any{"scope": "mine"}}, {"access_catalog", nil},
 		{"access_request", map[string]any{"system": "vpn"}}, {"access_list", nil},
+		{"access_request", map[string]any{"system": "stash", "project": "search-api", "dry_run": true}},
 	}
 	for _, cl := range calls {
 		if _, err := c.Call(ctx, tok.Token, cl.name, cl.args); err != nil {

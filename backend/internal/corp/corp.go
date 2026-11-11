@@ -35,14 +35,16 @@ type Person struct {
 
 // System — система в каталоге доступов.
 type System struct {
-	ID                    string   `json:"id"`
-	Name                  string   `json:"name"`
-	Description           string   `json:"description"`
-	Approval              string   `json:"approval"` // auto | lead
-	Levels                []string `json:"levels"`
-	JustificationRequired bool     `json:"justificationRequired,omitempty"`
-	DeniedRoles           []string `json:"deniedRoles,omitempty"`
-	DeniedHint            string   `json:"deniedHint,omitempty"`
+	ID                    string              `json:"id"`
+	Name                  string              `json:"name"`
+	Description           string              `json:"description"`
+	Approval              string              `json:"approval"`           // auto | lead | owner | devops
+	Levels                []string            `json:"levels"`             // read | edit | admin
+	Projects              map[string][]string `json:"projects,omitempty"` // проекты по командам
+	JustificationRequired bool                `json:"justificationRequired,omitempty"`
+	DeniedRoles           []string            `json:"deniedRoles,omitempty"`
+	DeniedLevels          map[string][]string `json:"deniedLevels,omitempty"` // роль → запрещённые уровни
+	DeniedHint            string              `json:"deniedHint,omitempty"`
 }
 
 // Absence — заявка на отсутствие.
@@ -71,6 +73,8 @@ type AccessRequest struct {
 	System        string     `json:"system"`
 	SystemName    string     `json:"systemName"`
 	Level         string     `json:"level"`
+	Project       string     `json:"project,omitempty"`
+	ApproverRole  string     `json:"approverRole,omitempty"`
 	Justification string     `json:"justification,omitempty"`
 	Status        string     `json:"status"` // granted | pending | rejected
 	ApproverID    string     `json:"approverId,omitempty"`
@@ -81,25 +85,31 @@ type AccessRequest struct {
 }
 
 type fixtures struct {
-	Teams          []Team         `json:"teams"`
-	Users          []Person       `json:"users"`
-	AbsenceBalance map[string]int `json:"absenceBalance"`
-	AccessCatalog  []System       `json:"accessCatalog"`
+	Teams          []Team            `json:"teams"`
+	Users          []Person          `json:"users"`
+	AbsenceBalance map[string]int    `json:"absenceBalance"`
+	AccessCatalog  []System          `json:"accessCatalog"`
+	ApproverRoles  map[string]string `json:"approverRoles"`
+	DevopsDuty     string            `json:"devopsDuty"`
+	ProjectOwners  map[string]string `json:"projectOwners"`
 }
 
 // Service хранит состояние имитаций в памяти.
 type Service struct {
-	mu       sync.Mutex
-	now      func() time.Time
-	loc      *time.Location
-	teams    map[string]Team
-	users    map[string]*Person
-	byLogin  map[string]*Person
-	balance  map[string]int
-	catalog  []System
-	absences []*Absence
-	access   []*AccessRequest
-	seq      int
+	mu            sync.Mutex
+	now           func() time.Time
+	loc           *time.Location
+	teams         map[string]Team
+	users         map[string]*Person
+	byLogin       map[string]*Person
+	balance       map[string]int
+	catalog       []System
+	approverRoles map[string]string
+	devops        string
+	owners        map[string]string
+	absences      []*Absence
+	access        []*AccessRequest
+	seq           int
 	// Outage имитирует недоступность сервиса (для демонстрации обработки сбоев).
 	outage bool
 }
@@ -118,7 +128,8 @@ func New(now func() time.Time, loc *time.Location) (*Service, error) {
 		return nil, fmt.Errorf("corp fixtures: %w", err)
 	}
 	s := &Service{now: now, loc: loc, teams: map[string]Team{}, users: map[string]*Person{},
-		byLogin: map[string]*Person{}, balance: map[string]int{}, catalog: f.AccessCatalog}
+		byLogin: map[string]*Person{}, balance: map[string]int{}, catalog: f.AccessCatalog,
+		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners}
 	today := dayOf(now().In(loc))
 	for _, t := range f.Teams {
 		s.teams[t.ID] = t
@@ -170,13 +181,16 @@ func (s *Service) Users() []domain.User {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]domain.User, 0, len(s.users))
-	for _, l := range []string{"anna", "ivan", "oleg", "maria", "dmitry", "sergey", "elena"} {
+	for _, l := range loginOrder {
 		if p, ok := s.byLogin[l]; ok {
 			out = append(out, p.User)
 		}
 	}
 	return out
 }
+
+// loginOrder — порядок учётных записей на экране входа.
+var loginOrder = []string{"anna", "ivan", "oleg", "maria", "pavel", "dmitry", "sergey", "elena"}
 
 func (s *Service) nextID(prefix string) string {
 	s.seq++

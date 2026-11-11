@@ -68,7 +68,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
       </ul>
     </div>
   </div>
-  <p class="muted small" style="margin-top:auto">Оценка команды Авито из кейса. Цель — снять рутинные обращения и организационные действия, не заменяя содержательную работу наставника.</p>
+  <p class="muted small" style="margin-top:auto">Оценка команды Авито: время уходит на 1:1, работу с куратором, обучение, ревью компетенций, обратную связь, экватор и выпускной. Цель AI-buddy — снять организационную рутину внутри этих активностей, не заменяя содержательную работу наставника.</p>
   <span class="num">2</span>
 </section>
 
@@ -91,7 +91,8 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <tr><td>2 неделя</td><td>Что делать дальше и что уже сделано</td><td>План адаптации и «следующий шаг», кнопка «Спросить buddy»</td></tr>
     <tr><td>1–2 месяц</td><td>Организационные вопросы: отгул под сессию, практика</td><td>Отгул с проверкой правил; ответы по инструкциям</td></tr>
     <tr><td>Всегда</td><td>Вопрос, которого нет в инструкциях</td><td>Вопрос наставнику, ответ сохраняется в базу знаний команды</td></tr>
-    <tr><td>Руководитель</td><td>Сколько времени уходит, где застрял стажёр</td><td>Согласования в один клик, прогресс стажёров, метрики пользы</td></tr>
+    <tr><td>1 неделя</td><td>Неясно, что считается успехом стажировки</td><td>Цели с критериями успеха от руководителя, прогресс в плане</td></tr>
+    <tr><td>Руководитель</td><td>Сколько времени уходит, где застрял стажёр</td><td>Согласования в один клик, прогресс стажёров и целей, напоминания, метрики пользы</td></tr>
   </table>
   <p class="muted small">27 шагов плана на 6 этапов построены по обоим листам чек-листа из кейса («Материалы для всех» и «Чек-лист Backend»).</p>
   <span class="num">4</span>
@@ -115,14 +116,14 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 </section>
 
 <section class="slide">
-  <h2>Доступы: нужный набор, заявки в один клик и честный отказ</h2>
+  <h2>Доступы: проект, уровень прав и ответственный за ресурс</h2>
   <div class="row" style="align-items:flex-start">
     <img class="shot" src="img/chat-access.png" style="width:700px">
     <img class="shot" src="img/chat-k8s.png" style="width:700px">
   </div>
   <div class="row small">
-    <p class="grow">Stash на запись — черновик, согласует руководитель. VPN, Jira, Tech-dep выдаются сразу, и шаг плана закрывается сам.</p>
-    <p class="grow">Продовый Kubernetes стажёру не положен: отказ даёт сам сервис доступов, AI-buddy объясняет причину и предлагает staging.</p>
+    <p class="grow">В заявке проект, уровень прав и обоснование. Репозиторий согласует владелец проекта, staging — DevOps, Confluence кластера — руководитель.</p>
+    <p class="grow">Продовый Kubernetes и администрирование стажёру не положены: отказ даёт сам сервис, AI-buddy предлагает альтернативу.</p>
   </div>
   <span class="num">6</span>
 </section>
@@ -145,9 +146,10 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 <section class="slide">
   <div class="row" style="height:100%">
     <div class="col" style="width:480px">
-      <h2 style="font-size:44px">План адаптации: этапы, статусы и следующий шаг</h2>
+      <h2 style="font-size:44px">План и цели: трекер прогресса без отчётов</h2>
       <ul class="clean">
-        <li>День и этап стажировки, прогресс, просрочки</li>
+        <li>Цели от руководителя: критерий успеха, срок, прогресс</li>
+        <li>День и этап стажировки, просрочки</li>
         <li>Следующий шаг: начатые и просроченные — первыми</li>
         <li>Стажёр отмечает свои шаги, наставник — свои</li>
         <li>Шаги с доступами закрываются автоматически</li>
@@ -160,13 +162,26 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 </section>
 
 <section class="slide">
+  <h2>Проактивность: ИИ-крон напоминает, а не ждёт вопроса</h2>
+  <div class="row" style="align-items:flex-start">
+    <img class="shot" src="img/proactive.png" style="width:700px">
+    <img class="shot" src="img/approvals-owner.png" style="width:700px">
+  </div>
+  <div class="row small">
+    <p class="grow">Утром стажёр получает сводку: день, новый этап, просрочки и следующий шаг с кнопкой-вопросом.</p>
+    <p class="grow">Заявка на репозиторий пришла владельцу проекта. Если она или вопрос наставнику ждут больше суток — ИИ-крон напомнит. Крон вызывает <code>POST /api/cron/reminders</code>.</p>
+  </div>
+  <span class="num">9</span>
+</section>
+
+<section class="slide">
   <h2>Руководитель: согласования и польза в цифрах</h2>
   <div class="row" style="align-items:flex-start">
     <img class="shot" src="img/approvals.png" style="width:700px">
     <img class="shot" src="img/insights.png" style="width:700px">
   </div>
   <p class="small">Доля вопросов без наставника, сэкономленные часы (10 мин на рутинный вопрос, 15 мин на помощь с заявкой), оценки ответов, выполненные заявки и шаги плана.</p>
-  <span class="num">9</span>
+  <span class="num">10</span>
 </section>
 
 <section class="slide">
@@ -193,7 +208,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
       </ul>
     </div>
   </div>
-  <span class="num">10</span>
+  <span class="num">11</span>
 </section>
 
 <section class="slide">
@@ -206,8 +221,9 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <tr><td><code>FF_*</code> из окружения</td><td>Feature flags</td><td>Точки проверки уже выделены в сервисном слое</td></tr>
     <tr><td>Таблица <code>events</code></td><td>Clickstream, Kafka</td><td>Sink для плоских событий <code>type, userId, props, at</code></td></tr>
     <tr><td><code>/metrics</code></td><td>Grafana</td><td>Scrape: события и гистограмма времени ответа агента</td></tr>
+    <tr><td><code>/api/cron/reminders</code></td><td>Внутренний ИИ-крон</td><td>Вызов по расписанию со служебным токеном; встроенный таймер отключается</td></tr>
   </table>
-  <span class="num">11</span>
+  <span class="num">12</span>
 </section>
 
 <section class="slide">
@@ -221,22 +237,22 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <li>Синтетические данные, инструкции помечены как тестовые; больничные, зарплата, финансы — вне области</li>
     <li>Cookie HttpOnly, CSRF-заголовок, CSP, лимиты размера и частоты; ответы ассистента без innerHTML</li>
   </ul>
-  <span class="num">12</span>
+  <span class="num">13</span>
 </section>
 
 <section class="slide">
   <h2>Качество: спецификации, тесты, запуск одной командой</h2>
   <div class="row">
-    <div class="note violet tilt-l" style="width:330px"><p class="kpi">94,8%</p><p class="small">покрытие строк бэкенда (Go), 46 тестов</p></div>
-    <div class="note blue tilt-r" style="width:330px"><p class="kpi">90,4%</p><p class="small">покрытие фронтенда (React/TS), 19 тестов</p></div>
-    <div class="note green tilt-l" style="width:330px"><p class="kpi">12/12</p><p class="small">проверок e2e-сценария по трём ролям в Playwright</p></div>
+    <div class="note violet tilt-l" style="width:330px"><p class="kpi">94,8%</p><p class="small">покрытие строк бэкенда (Go), 50 тестов</p></div>
+    <div class="note blue tilt-r" style="width:330px"><p class="kpi">90,9%</p><p class="small">покрытие фронтенда (React/TS), 19 тестов</p></div>
+    <div class="note green tilt-l" style="width:330px"><p class="kpi">17/17</p><p class="small">проверок e2e-сценария по трём ролям в Playwright</p></div>
   </div>
   <ul class="clean">
-    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–005 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
+    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–007 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
     <li>Тесты агента в обоих режимах: офлайн и LLM на скриптовой модели (ошибки, зацикливание, сбои)</li>
     <li><code>docker compose up --build</code> — стенд; <code>--profile test</code> — тесты с PostgreSQL и Redis и отчёты о покрытии</li>
   </ul>
-  <span class="num">13</span>
+  <span class="num">14</span>
 </section>
 
 <section class="slide">
@@ -259,21 +275,21 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     </div>
   </div>
   <p class="note violet" style="margin-top:auto">Раскатываем, если часы наставника снижаются, а время до первой задачи и CSAT не хуже контроля.</p>
-  <span class="num">14</span>
+  <span class="num">15</span>
 </section>
 
 <section class="slide" style="background:var(--surface)">
   <h2>Что дальше</h2>
   <div class="row" style="align-items:flex-start">
     <div class="note blue tilt-l grow"><h3>Источники</h3><p class="small">Confluence команды с правами пространств; новые сервисы через MCP: командировки, бенефиты, согласия</p></div>
-    <div class="note violet tilt-r grow"><h3>Проактивность</h3><p class="small">ИИ-крон: напоминания о просроченных шагах, «завтра экватор — вот чек-лист»</p></div>
+    <div class="note violet tilt-r grow"><h3>События сервисов</h3><p class="small">Агент по событиям корпоративных сервисов: заявка согласована — следующий шаг; завтра экватор — чек-лист подготовки</p></div>
     <div class="note green tilt-l grow"><h3>Каналы</h3><p class="small">Бот в корпоративном мессенджере и push-уведомления PWA — клиенты того же API, агент не меняется</p></div>
     <div class="note pink tilt-r grow"><h3>Для наставника</h3><p class="small">Черновик обратной связи по плану, напоминания о 1:1; после онбординга — точка входа для рабочих вопросов</p></div>
   </div>
   <div style="margin-top:auto">
     <h1 style="font-size:72px">Спасибо!</h1>
     <p style="margin-top:14px">Код, инструкции запуска и видео: <span class="link">github.com/VV00nder/ai-buddy-hack-and-change-2026</span></p>
-    <p class="muted small">Тестовые входы: anna, oleg, maria, ivan, elena — пароль buddy2026. Без ключа LLM работает офлайн-агент.</p>
+    <p class="muted small">Тестовые входы: anna, oleg, maria, pavel, ivan, elena — пароль buddy2026. Без ключа LLM работает офлайн-агент.</p>
   </div>
 </section>
 </body></html>

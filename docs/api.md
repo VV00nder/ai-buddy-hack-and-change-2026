@@ -18,10 +18,14 @@
 | POST | `/api/actions/{id}/cancel` | владелец | Отменить черновик |
 | GET | `/api/plan` | все | Мой план адаптации |
 | PATCH | `/api/plan/steps/{step}` `{status,note,internId?}` | стажёр / наставник / руководитель | Статус шага |
+| GET | `/api/goals?internId=` | стажёр (свои), наставник, руководитель, HR BP | Цели стажировки |
+| POST | `/api/goals` `{internId,title,metric,due}` | руководитель, наставник стажёра | Поставить цель |
+| PATCH | `/api/goals/{id}` `{status?,progress?,note?}` | стажёр, руководитель, наставник | Прогресс и статус цели |
+| POST | `/api/cron/reminders` | ИИ-крон (`X-Cron-Token`) | Утренние сводки и напоминания о зависших заявках и вопросах |
 | GET | `/api/team` | наставник, руководитель, HR BP | Мои стажёры и прогресс |
 | GET | `/api/team/{intern}/plan` | наставник, руководитель, HR BP | План стажёра |
-| GET | `/api/approvals` | руководитель | Заявки на согласование |
-| POST | `/api/approvals/{kind}/{id}` `{approve,comment}` | руководитель | Решение |
+| GET | `/api/approvals` | руководитель, наставник, инженер | Заявки, где пользователь — согласующий (руководитель, владелец проекта, DevOps) |
+| POST | `/api/approvals/{kind}/{id}` `{approve,comment}` | согласующий | Решение (сервис проверяет, что согласующий именно он) |
 | GET | `/api/inbox` | наставник | Вопросы стажёров |
 | POST | `/api/inbox/{id}/answer` `{answer,addToFaq}` | наставник | Ответ |
 | GET | `/api/questions` | стажёр | Мои вопросы наставнику |

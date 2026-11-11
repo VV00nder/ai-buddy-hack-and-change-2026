@@ -16,6 +16,7 @@
 |---|---|---|---|
 | `kb_search(query)` | AI-buddy | нет | Результаты уже отфильтрованы по правам |
 | `plan_get()` | AI-buddy | нет | — |
+| `goals_get()` | AI-buddy | нет | Только свои цели |
 | `ask_mentor(question)` | AI-buddy | черновик | Отправка только кнопкой |
 | `directory_whoami`, `directory_team` | MCP corp | нет | Только своя команда |
 | `absence_policy`, `absence_balance`, `absence_list`, `absence_get` | MCP corp | нет | Только свои заявки |
@@ -47,6 +48,8 @@
 | «хочу отгул завтра» | Отказ по правилу + альтернатива | `TestOfflineDayOffScenario` |
 | «Запроси доступ к stash на запись» | Черновик `stash/write` | `TestOfflineAccessScenario` |
 | «дай доступ к kubernetes» | Объяснение и staging, без черновика | `TestOfflineAccessScenario` |
+| «Запроси доступ к stash на запись» → «search-api» | Уточнение проекта, затем черновик; согласует владелец проекта | `TestOfflineAccessScenario` |
+| «Какие у меня цели на стажировку?» | Цели, критерии, сроки, прогресс | `TestGoalsIntent` |
 | «Покажи методичку наставника…» | Закрытый текст не раскрывается | `TestOfflineQA` |
 | «Какой у нас бюджет на корпоратив?» | «Не нашёл» + вопрос наставнику | `TestOfflineQA` |
 | LLM вызывает `absence_create` | Создаётся только черновик, модель получает пометку «НЕ отправлена» | `TestLLMMode` |

@@ -25,6 +25,8 @@ type Buddy struct {
 	LLMTimeout     time.Duration
 	AgentTimeout   time.Duration
 	MsgRateLimit   int
+	CronToken      string
+	ReminderEvery  time.Duration
 }
 
 // Corp — настройки имитации корпоративных сервисов.
@@ -81,6 +83,8 @@ func LoadBuddy(g Getenv) Buddy {
 		LLMTimeout:     time.Duration(num(g, "LLM_TIMEOUT_SECONDS", 40)) * time.Second,
 		AgentTimeout:   time.Duration(num(g, "AGENT_TIMEOUT_SECONDS", 60)) * time.Second,
 		MsgRateLimit:   int(num(g, "MSG_RATE_LIMIT_PER_MIN", 20)),
+		CronToken:      str(g, "CRON_TOKEN", "demo-cron"),
+		ReminderEvery:  time.Duration(num(g, "REMINDER_INTERVAL_MINUTES", 60)) * time.Minute,
 	}
 }
 

@@ -50,6 +50,9 @@ func (a *Agent) prepareAccess(ctx context.Context, req Request, args map[string]
 	}
 	delete(args, "dry_run")
 	name, _ := prev["system_name"].(string)
+	if pr, _ := prev["project"].(string); pr != "" {
+		name += " — " + pr
+	}
 	p := &Proposal{Kind: domain.ActionAccess, Tool: "access_request", Title: name, Args: args, Preview: prev}
 	return p, nil, nil
 }

@@ -9,6 +9,7 @@ const arg = (name, def) => {
   return i > -1 ? process.argv[i + 1] : def;
 };
 const BASE = arg('--base', 'http://localhost:8080');
+const CRON = arg('--cron-token', 'demo-cron');
 const VIDEO = arg('--video', '');
 const SLOW = Number(arg('--slow', VIDEO ? '1.4' : '0'));
 const pause = (ms) => new Promise((r) => setTimeout(r, ms * SLOW));
@@ -91,8 +92,15 @@ check('заявка на отгул отправлена', (await page.locator('
 await caption('Заявка создана в корпоративном сервисе и ждёт решения руководителя', 2400);
 
 // 3. Доступы и права
-await caption('Второй сценарий — доступы. Просим Stash с правами на запись', 1800);
+await caption('Второй сценарий — доступы. В заявке проект, уровень прав и обоснование; согласующий зависит от ресурса', 2400);
 await ask('Запроси доступ к stash на запись');
+check('ассистент уточняет проект', (await page.locator('.chips.inline .chip').count()) === 3);
+await caption('Проект не указан — AI-buddy предлагает проекты команды', 1800);
+await page.locator('.chips.inline .chip', { hasText: 'search-api' }).click();
+await page.locator('.note-access.status-proposed').waitFor();
+await pause(800);
+check('согласует владелец проекта', (await page.locator('.note-access.status-proposed').innerText()).includes('владелец проекта'));
+await caption('Репозиторий согласует владелец проекта — наставник Олег, а не руководитель', 2400);
 await page.getByRole('button', { name: 'Отправить заявку' }).click();
 await page.locator('.note-access .stamp').last().waitFor();
 check('заявка на доступ к Stash', true);
@@ -114,19 +122,24 @@ await logout();
 await caption('Руководитель Мария видит заявки и решает в один клик', 1800);
 await loginAs('Мария Волкова');
 await page.locator('.approval').first().waitFor();
-check('две заявки на согласовании', (await page.locator('.approval').count()) === 2);
+check('у руководителя только отгул', (await page.locator('.approval').count()) === 1);
 await pause(1200);
 await page.locator('.approval').first().getByPlaceholder('Необязательно').fill('Хорошего отдыха!');
-await page.locator('.approval').first().getByRole('button', { name: 'Согласовать' }).click();
-await pause(1500);
 await page.locator('.approval').first().getByRole('button', { name: 'Согласовать' }).click();
 await page.getByText('Нечего согласовывать').waitFor();
 await pause(1000);
 await logout();
 
 // 6. Наставник отвечает и пополняет базу знаний
-await caption('Наставник Олег отвечает на вопрос и сохраняет ответ в базу знаний команды', 2000);
+await caption('Олег — наставник и владелец репозитория: согласует доступ и отвечает на вопрос', 2200);
 await loginAs('Олег Кузнецов');
+await page.getByRole('button', { name: 'Согласования', exact: true }).click();
+await page.locator('.approval').first().waitFor();
+await pause(800);
+await page.locator('.approval').first().getByRole('button', { name: 'Согласовать' }).click();
+await page.getByText('Нечего согласовывать').waitFor();
+await pause(600);
+await page.getByRole('button', { name: 'Вопросы стажёров', exact: true }).click();
 await page.getByPlaceholder('Ответ стажёру').fill('Стенд поиска — search-staging, ссылка в README сервиса. Доступ есть у всех инженеров команды.');
 await pause(800);
 await page.getByRole('button', { name: 'Ответить' }).click();
@@ -134,9 +147,14 @@ await page.getByText('Новых вопросов нет').waitFor();
 await pause(1000);
 await logout();
 
-// 7. Стажёр видит результат
-await caption('Анна снова в AI-buddy: статусы, ответ наставника и обновлённый план', 2000);
+// 7. ИИ-крон и результат для стажёра
+const cron = await fetch(BASE + '/api/cron/reminders', { method: 'POST', headers: { 'X-Cron-Token': CRON } }).then((r) => r.json());
+check('ИИ-крон отправил утренние сводки', cron.digests >= 1);
+await caption('Наутро внутренний ИИ-крон запускает напоминания. Анна открывает AI-buddy', 2200);
 await loginAs('Анна Смирнова');
+check('утренняя сводка в чате', (await page.locator('.bubble.proactive').count()) === 1);
+await page.locator('.bubble.proactive').scrollIntoViewIfNeeded();
+await caption('Утренняя сводка: день стажировки и следующий шаг. Плюс статусы заявок и ответ наставника', 2800);
 const badge = await page.locator('.badge').innerText().catch(() => '0');
 check('уведомления о решениях', Number(badge) >= 3);
 await page.getByRole('button', { name: /Уведомления/ }).click();
@@ -146,6 +164,11 @@ check('ответ наставника в чате', (await page.locator('.bubbl
 await page.getByRole('button', { name: 'Мой план', exact: true }).click();
 await pause(800);
 check('шаг плана про Stash закрыт автоматически', (await page.locator('.step-done', { hasText: 'Stash' }).count()) === 1);
+check('цели стажировки в плане', (await page.locator('.goal').count()) === 3);
+await caption('Цели стажировки с критериями успеха — трекер прогресса из чек-листа. Руководитель видит прогресс без отчётов', 3000);
+await page.locator('.goal').first().getByRole('button', { name: 'Отметить выполненной' }).click();
+await pause(900);
+await page.locator('.step-done', { hasText: 'Stash' }).scrollIntoViewIfNeeded();
 await caption('Шаг плана «Получи доступ к Stash» закрылся автоматически после выдачи доступа', 2600);
 await page.getByRole('button', { name: 'Чат', exact: true }).click();
 await caption('Ответ наставника теперь в базе знаний: следующий стажёр получит его сразу', 2000);

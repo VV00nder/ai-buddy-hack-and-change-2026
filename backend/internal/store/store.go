@@ -40,6 +40,10 @@ type Store interface {
 	AddFAQ(ctx context.Context, f domain.FAQEntry) error
 	FAQs(ctx context.Context) ([]domain.FAQEntry, error)
 
+	SaveGoal(ctx context.Context, g domain.Goal) error
+	Goal(ctx context.Context, id string) (domain.Goal, error)
+	Goals(ctx context.Context, internID string) ([]domain.Goal, error)
+
 	AddEvent(ctx context.Context, e domain.Event) error
 	Events(ctx context.Context) ([]domain.Event, error)
 }
