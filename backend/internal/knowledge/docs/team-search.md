@@ -3,6 +3,7 @@ id: team-search
 title: Команда «Поиск объявлений»: кто есть кто и как мы работаем
 audience: intern,mentor,lead,hrbp
 team: search
+folder: Команды
 tags: команда, знакомство, ритуалы, дейли, встречи, чат
 ---
 ## Кто есть кто

@@ -1,6 +1,7 @@
 package onboarding
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -86,5 +87,42 @@ func TestAutoAndLookup(t *testing.T) {
 	}
 	if _, ok := tpl.Step("none"); ok {
 		t.Fatal("none")
+	}
+}
+
+func TestTemplates(t *testing.T) {
+	all, err := LoadTemplates()
+	if err != nil || len(all) != 2 || all[0].ID != DefaultID || !all[0].Builtin {
+		t.Fatalf("templates: %v %d", err, len(all))
+	}
+	c := all[0].Clone()
+	c.Steps[0].Title = "changed"
+	c.Steps[0].Docs = append(c.Steps[0].Docs, "x")
+	if all[0].Steps[0].Title == "changed" {
+		t.Fatal("clone shares steps")
+	}
+	if ids := all[0].StepsWithQuiz("quiz-week1"); len(ids) != 1 || ids[0] != "w1-quiz" {
+		t.Fatalf("quiz steps: %v", ids)
+	}
+	bad := func(mut func(t *Template)) error {
+		x := all[0].Clone()
+		mut(x)
+		return x.Validate()
+	}
+	for name, mut := range map[string]func(t *Template){
+		"name":      func(t *Template) { t.Name = "x" },
+		"periods":   func(t *Template) { t.Periods = nil },
+		"period":    func(t *Template) { t.Periods[0].ToDay = -1 },
+		"steps":     func(t *Template) { t.Steps = nil },
+		"dup":       func(t *Template) { t.Steps[1].ID = t.Steps[0].ID },
+		"unknown":   func(t *Template) { t.Steps[0].Period = "nope" },
+		"owner":     func(t *Template) { t.Steps[0].Owner = "boss" },
+		"title":     func(t *Template) { t.Steps[0].Title = "x" },
+		"long desc": func(t *Template) { t.Steps[0].Description = strings.Repeat("я", 2001) },
+		"many":      func(t *Template) { t.Steps = make([]Step, 201) },
+	} {
+		if bad(mut) == nil {
+			t.Errorf("%s: expected error", name)
+		}
 	}
 }

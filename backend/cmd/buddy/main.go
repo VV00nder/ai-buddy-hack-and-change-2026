@@ -65,7 +65,7 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	tpl, err := onboarding.LoadTemplate()
+	tpls, err := onboarding.LoadTemplates()
 	if err != nil {
 		return err
 	}
@@ -81,17 +81,20 @@ func run(log *slog.Logger) error {
 		}
 	}
 	hub := events.NewHub()
-	planFn := func(ctx context.Context, u domain.User) (onboarding.Plan, error) {
-		states, err := st.StepStates(ctx, u.ID)
-		if err != nil {
-			return onboarding.Plan{}, err
-		}
-		return tpl.Build(u, states, now()), nil
-	}
+	// a создаётся после агента, а агенту нужен план и тесты из сервисного слоя.
+	var a *app.App
+	planFn := func(ctx context.Context, u domain.User) (onboarding.Plan, error) { return a.PlanFor(ctx, u) }
 	goalsFn := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return st.Goals(ctx, u.ID) }
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now, Log: log})
-	a := app.New(app.Config{CorpBaseURL: cfg.CorpURL, AgentTimeout: cfg.AgentTimeout, MsgRateLimit: cfg.MsgRateLimit},
-		app.Deps{Store: st, KV: sessions, Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: hub, Flags: ff, Now: now, Log: log})
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now, Log: log,
+		SetStep: func(ctx context.Context, u domain.User, step string, status domain.StepStatus) (onboarding.Plan, error) {
+			return a.SetStep(ctx, u, u.ID, step, status, "")
+		},
+		Quizzes: func(ctx context.Context, u domain.User) ([]agent.QuizRef, error) { return a.QuizRefs(ctx, u) }})
+	a = app.New(app.Config{CorpBaseURL: cfg.CorpURL, AgentTimeout: cfg.AgentTimeout, MsgRateLimit: cfg.MsgRateLimit},
+		app.Deps{Store: st, KV: sessions, Corp: corpClient, KB: kb, Templates: tpls, Agent: ag, Hub: hub, Flags: ff, Now: now, Log: log})
+	if err := a.LoadKB(ctx); err != nil {
+		return err
+	}
 	if err := a.LoadFAQ(ctx); err != nil {
 		return err
 	}

@@ -48,7 +48,11 @@ type Deps struct {
 	Log  *slog.Logger // nil — slog.Default()
 	// Goals — цели стажировки пользователя (необязательно).
 	Goals func(ctx context.Context, u domain.User) ([]domain.Goal, error)
-	Now   func() time.Time
+	// SetStep — отметка шага плана из чата (необязательно).
+	SetStep func(ctx context.Context, u domain.User, stepID string, status domain.StepStatus) (onboarding.Plan, error)
+	// Quizzes — тесты, доступные пользователю (необязательно).
+	Quizzes func(ctx context.Context, u domain.User) ([]QuizRef, error)
+	Now     func() time.Time
 	// MaxSteps — ограничение шагов вызова инструментов в LLM-режиме.
 	MaxSteps int
 }
@@ -84,6 +88,17 @@ type Reply struct {
 	Escalated bool
 	// Answered — ответ найден в базе знаний / сервисах.
 	Answered bool
+	// QuizID — предложить пройти тест (кнопка под ответом).
+	QuizID string
+}
+
+// QuizRef — тест для подсказок агента.
+type QuizRef struct {
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	DocIDs []string `json:"docIds"`
+	Passed bool     `json:"passed"`
+	Best   int      `json:"best"`
 }
 
 // Agent — исполнитель.

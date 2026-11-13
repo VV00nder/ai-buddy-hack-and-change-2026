@@ -3,6 +3,7 @@ id: process-engineering
 title: Инженерные практики: Zero Bug Policy, ревью, релизы
 audience: all
 team: all
+folder: Процессы/Разработка
 tags: zbp, zero bug policy, баги, ревью, code review, релиз, принципы разработки, effective go
 ---
 ## Zero Bug Policy

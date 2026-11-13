@@ -32,6 +32,14 @@ type Doc struct {
 	Tags      []string
 	Sections  []Section
 	Synthetic bool
+	// Folder — путь папки через «/», например «Процессы/Доступы».
+	Folder string
+	// Custom — документ добавлен в интерфейсе (его можно править и удалять).
+	Custom bool
+	// Body — исходный markdown без заголовка (для редактора).
+	Body      string
+	UpdatedBy string
+	UpdatedAt string
 }
 
 // Section — раздел документа (единица поиска).
@@ -125,6 +133,8 @@ func parse(raw string) (*Doc, error) {
 			d.Team = v
 		case "tags":
 			d.Tags = splitList(v)
+		case "folder":
+			d.Folder = CleanFolder(v)
 		}
 	}
 	if d.ID == "" || d.Title == "" {
@@ -136,12 +146,21 @@ func parse(raw string) (*Doc, error) {
 	if len(d.Audience) == 0 {
 		d.Audience = []string{"all"}
 	}
+	d.Body = strings.TrimSpace(body)
+	d.Sections = ParseSections(d.Title, body)
+	return d, nil
+}
+
+// ParseSections делит markdown на разделы по заголовкам «## ».
+func ParseSections(title, body string) []Section {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	var out []Section
 	var cur *Section
-	intro := Section{Heading: d.Title}
+	intro := Section{Heading: title}
 	for _, line := range strings.Split(body, "\n") {
 		if h, ok := strings.CutPrefix(line, "## "); ok {
 			if cur != nil {
-				d.Sections = append(d.Sections, *cur)
+				out = append(out, *cur)
 			}
 			cur = &Section{Heading: strings.TrimSpace(h)}
 			continue
@@ -153,15 +172,26 @@ func parse(raw string) (*Doc, error) {
 		}
 	}
 	if cur != nil {
-		d.Sections = append(d.Sections, *cur)
+		out = append(out, *cur)
 	}
 	if strings.TrimSpace(intro.Text) != "" {
-		d.Sections = append([]Section{intro}, d.Sections...)
+		out = append([]Section{intro}, out...)
 	}
-	for i := range d.Sections {
-		d.Sections[i].Text = strings.TrimSpace(d.Sections[i].Text)
+	for i := range out {
+		out[i].Text = strings.TrimSpace(out[i].Text)
 	}
-	return d, nil
+	return out
+}
+
+// CleanFolder нормализует путь папки: убирает лишние «/» и пробелы.
+func CleanFolder(p string) string {
+	var parts []string
+	for _, x := range strings.Split(p, "/") {
+		if x = strings.TrimSpace(x); x != "" {
+			parts = append(parts, x)
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func splitList(v string) []string {
@@ -205,11 +235,86 @@ func (b *Base) reindex() {
 func (b *Base) AddFAQ(e domain.FAQEntry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	d := &Doc{ID: "faq-" + e.ID, Title: "Ответ наставника: " + e.Question, Audience: []string{"all"}, Team: e.Team}
+	d := &Doc{ID: "faq-" + e.ID, Title: "Ответ наставника: " + e.Question, Audience: []string{"all"}, Team: e.Team, Folder: "Ответы наставников"}
 	d.Sections = []Section{{Heading: e.Question, Text: e.Answer}}
 	b.docs[d.ID] = d
 	b.addChunk(&chunk{doc: d, section: d.Sections[0], kind: "faq"})
 	b.reindex()
+}
+
+// Upsert добавляет или заменяет документ (правка в интерфейсе) и переиндексирует базу.
+func (b *Base) Upsert(d *Doc) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(d.Audience) == 0 {
+		d.Audience = []string{"all"}
+	}
+	if d.Team == "" {
+		d.Team = "all"
+	}
+	d.Folder = CleanFolder(d.Folder)
+	d.Sections = ParseSections(d.Title, d.Body)
+	b.removeChunks(d.ID)
+	b.docs[d.ID] = d
+	for _, s := range d.Sections {
+		b.addChunk(&chunk{doc: d, section: s, kind: "doc"})
+	}
+	b.reindex()
+}
+
+// Delete удаляет документ из базы.
+func (b *Base) Delete(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.removeChunks(id)
+	delete(b.docs, id)
+	b.reindex()
+}
+
+// Raw возвращает документ без проверки прав (для проверок редактирования).
+func (b *Base) Raw(id string) (*Doc, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	d, ok := b.docs[id]
+	return d, ok
+}
+
+func (b *Base) removeChunks(id string) {
+	kept := b.chunks[:0]
+	for _, c := range b.chunks {
+		if c.doc.ID != id {
+			kept = append(kept, c)
+		}
+	}
+	b.chunks = kept
+}
+
+// Filter возвращает доступные документы, подходящие под запрос: совпадение
+// в названии, папке или тегах, либо найденные поиском по тексту.
+func (b *Base) Filter(query string, u domain.User) []*Doc {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return b.List(u)
+	}
+	seen := map[string]bool{}
+	var out []*Doc
+	for _, d := range b.List(u) {
+		hay := strings.ToLower(d.Title + " " + d.Folder + " " + strings.Join(d.Tags, " "))
+		if strings.Contains(hay, q) {
+			seen[d.ID] = true
+			out = append(out, d)
+		}
+	}
+	for _, h := range b.Search(query, u, 0) {
+		if seen[h.DocID] || h.Coverage < 0.5 {
+			continue
+		}
+		if d, ok := b.Get(h.DocID, u); ok {
+			seen[h.DocID] = true
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // CanRead проверяет право пользователя на документ.

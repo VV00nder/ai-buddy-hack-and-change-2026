@@ -23,6 +23,7 @@ import (
 	"aibuddy/internal/knowledge"
 	"aibuddy/internal/kv"
 	"aibuddy/internal/onboarding"
+	"aibuddy/internal/quiz"
 	"aibuddy/internal/store"
 )
 
@@ -62,12 +63,15 @@ type App struct {
 	corp  agent.Corp
 	kb    *knowledge.Base
 	tpl   *onboarding.Template
-	agent *agent.Agent
-	hub   *events.Hub
-	flags flags.Flags
-	now   func() time.Time
-	log   *slog.Logger
-	http  *http.Client
+	// builtinTpl и builtinQuiz — встроенные шаблоны обучения и тесты (только чтение).
+	builtinTpl  []*onboarding.Template
+	builtinQuiz []*quiz.Quiz
+	agent       *agent.Agent
+	hub         *events.Hub
+	flags       flags.Flags
+	now         func() time.Time
+	log         *slog.Logger
+	http        *http.Client
 
 	cronMu   sync.Mutex
 	cronSent map[string]string
@@ -88,11 +92,14 @@ type Deps struct {
 	Corp  agent.Corp
 	KB    *knowledge.Base
 	Tpl   *onboarding.Template
-	Agent *agent.Agent
-	Hub   *events.Hub
-	Flags flags.Flags
-	Now   func() time.Time
-	Log   *slog.Logger
+	// Templates и Quizzes — встроенные шаблоны и тесты; nil — загрузить встроенные.
+	Templates []*onboarding.Template
+	Quizzes   []*quiz.Quiz
+	Agent     *agent.Agent
+	Hub       *events.Hub
+	Flags     flags.Flags
+	Now       func() time.Time
+	Log       *slog.Logger
 }
 
 // New создаёт сервис.
@@ -115,7 +122,16 @@ func New(cfg Config, d Deps) *App {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	return &App{cfg: cfg, store: d.Store, kv: d.KV, corp: d.Corp, kb: d.KB, tpl: d.Tpl, agent: d.Agent, hub: d.Hub,
+	if d.Templates == nil {
+		d.Templates, _ = onboarding.LoadTemplates()
+	}
+	if d.Tpl == nil && len(d.Templates) > 0 {
+		d.Tpl = d.Templates[0]
+	}
+	if d.Quizzes == nil {
+		d.Quizzes, _ = quiz.LoadBuiltin()
+	}
+	return &App{cfg: cfg, store: d.Store, kv: d.KV, corp: d.Corp, kb: d.KB, tpl: d.Tpl, builtinTpl: d.Templates, builtinQuiz: d.Quizzes, agent: d.Agent, hub: d.Hub,
 		flags: d.Flags, now: d.Now, log: d.Log, http: &http.Client{Timeout: 10 * time.Second}, metrics: NewMetrics(), cronSent: map[string]string{}}
 }
 

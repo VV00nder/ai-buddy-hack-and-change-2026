@@ -107,6 +107,10 @@ func (a *Agent) handleOffline(ctx context.Context, req Request) Reply {
 			Proposal: prepareMentorQuestion(q), Answered: true}
 	case has(t, "что ты умеешь", "что умеешь", "помощь", "help", "/start") || regexp.MustCompile(`^(привет|здравств|добрый|хай)`).MatchString(t):
 		return a.greet(ctx, req)
+	case isQuizIntent(t):
+		return a.quizReply(ctx, req)
+	case isStepDoneIntent(t):
+		return a.stepDone(ctx, req)
 	case has(t, "статус") || has(t, "что с моей", "что с заявк", "одобрил", "согласовал", "мои заявки"):
 		return a.statuses(ctx, req)
 	case has(t, "отгул", "отпуск", "выходн", "отпрос", "day off", "dayoff", "не выйду", "не смогу выйти", "отсутств"):
@@ -128,7 +132,8 @@ func (a *Agent) greet(ctx context.Context, req Request) Reply {
 		"- отвечать на вопросы о команде, процессах и инструментах со ссылками на инструкции;\n"+
 		"- показывать план адаптации и подсказывать следующий шаг;\n"+
 		"- готовить заявки на отгул и доступы — ты только подтверждаешь;\n"+
-		"- передавать вопросы наставнику, если в базе знаний нет ответа.", firstName(req.User.Name))
+		"- передавать вопросы наставнику, если в базе знаний нет ответа;\n"+
+		"- отмечать выполненные шаги плана и предлагать тесты, чтобы проверить себя.", firstName(req.User.Name))
 	r := Reply{Text: text, Answered: true, Suggestions: []string{"Что мне делать дальше?", "Какие доступы мне нужны?", "Как оформить отгул?"}}
 	if a.d.Plan != nil {
 		if p, err := a.d.Plan(ctx, req.User); err == nil && p.Next != nil {

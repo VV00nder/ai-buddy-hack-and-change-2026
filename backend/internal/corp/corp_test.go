@@ -353,7 +353,7 @@ func TestHTTPAndMCP(t *testing.T) {
 	c := mcp.NewClient(ts.URL+"/mcp", time.Second)
 	ctx := context.Background()
 	tools, err := c.ListTools(ctx, tok.Token)
-	if err != nil || len(tools) != 10 { // стажёр не видит *_decide
+	if err != nil || len(tools) != 11 { // стажёр не видит *_decide и delegation_set
 		t.Fatalf("tools: %d %v", len(tools), err)
 	}
 	calls := []struct {
@@ -424,5 +424,72 @@ func TestWorkdays(t *testing.T) {
 	}
 	if s, err := New(nil, nil); err != nil || s == nil {
 		t.Fatal("defaults")
+	}
+}
+
+func TestDeputies(t *testing.T) {
+	s := newSvc(t)
+	anna, maria, oleg, elena := claims(s, "anna"), claims(s, "maria"), claims(s, "oleg"), claims(s, "elena")
+	r, err := s.CreateAbsence(anna, AbsenceInput{DateFrom: "2026-11-16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := r["id"].(string)
+	// без делегирования HR BP не видит и не решает заявку руководителя
+	if l, _ := s.ListAbsences(elena, "approvals"); len(l["items"].([]Absence)) != 0 {
+		t.Fatal("elena sees approvals")
+	}
+	if _, err := s.DecideAbsence(elena, id, "approved", ""); toolCode(err) != "forbidden" {
+		t.Fatal("elena decides")
+	}
+	// только руководитель назначает заместителя, только из своей команды и не стажёра
+	if _, err := s.SetDeputy(oleg, "u-elena", true); toolCode(err) != "forbidden" {
+		t.Fatal("mentor sets deputy")
+	}
+	for id, code := range map[string]string{"u-pavel": "other_team", "u-anna": "not_allowed_for_role", "u-none": "not_found", "u-maria": "not_found"} {
+		if _, err := s.SetDeputy(maria, id, true); toolCode(err) != code {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	d, err := s.SetDeputy(maria, "u-elena", true)
+	if err != nil || len(d["deputies"].([]map[string]any)) != 1 {
+		t.Fatalf("deputy: %v %v", d, err)
+	}
+	if l, _ := s.Deputies(elena); len(l["actingFor"].([]map[string]any)) != 1 {
+		t.Fatal("acting for")
+	}
+	if l, _ := s.ListAbsences(elena, "approvals"); len(l["items"].([]Absence)) != 1 {
+		t.Fatal("deputy sees approvals")
+	}
+	if _, err := s.GetAbsence(elena, id); err != nil {
+		t.Fatal("deputy reads absence")
+	}
+	res, err := s.DecideAbsence(elena, id, "approved", "за Марию")
+	if err != nil || res["decidedBy"] != "u-elena" {
+		t.Fatalf("deputy decides: %v %v", res, err)
+	}
+	// доступ: согласующий — руководитель, решает заместитель
+	acc, err := s.RequestAccess(anna, AccessInput{System: "redash", Justification: "Отчёты по поиску для задачи"})
+	if err != nil || acc["approver_id"] != "u-maria" {
+		t.Fatalf("access: %v %v", acc, err)
+	}
+	if l, _ := s.ListAccess(elena, "approvals"); len(l["items"].([]AccessRequest)) != 1 {
+		t.Fatal("deputy sees access approvals")
+	}
+	if res, err := s.DecideAccess(elena, acc["id"].(string), "granted", ""); err != nil || res["decidedBy"] != "u-elena" {
+		t.Fatalf("deputy access: %v %v", res, err)
+	}
+	if d, _ := s.SetDeputy(maria, "u-elena", false); len(d["deputies"].([]map[string]any)) != 0 {
+		t.Fatal("revoke")
+	}
+	if _, err := s.DecideAbsence(elena, id, "approved", ""); toolCode(err) != "forbidden" {
+		t.Fatal("revoked deputy decides")
+	}
+	s.SetOutage(true)
+	if _, err := s.SetDeputy(maria, "u-elena", true); err == nil {
+		t.Fatal("outage set")
+	}
+	if _, err := s.Deputies(maria); err == nil {
+		t.Fatal("outage list")
 	}
 }

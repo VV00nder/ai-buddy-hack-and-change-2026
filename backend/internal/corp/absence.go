@@ -162,7 +162,7 @@ func (s *Service) ListAbsences(c identity.Claims, scope string) (map[string]any,
 	}
 	items := []Absence{}
 	for _, a := range s.absences {
-		if (scope == "approvals" && a.ApproverID == c.Sub && a.Status == "pending") || (scope != "approvals" && a.UserID == c.Sub) {
+		if (scope == "approvals" && s.mayDecide(a.ApproverID, c.Sub) && a.Status == "pending") || (scope != "approvals" && a.UserID == c.Sub) {
 			items = append(items, *a)
 		}
 	}
@@ -178,7 +178,7 @@ func (s *Service) GetAbsence(c identity.Claims, id string) (map[string]any, erro
 	}
 	for _, a := range s.absences {
 		if a.ID == id {
-			if a.UserID != c.Sub && a.ApproverID != c.Sub {
+			if a.UserID != c.Sub && !s.mayDecide(a.ApproverID, c.Sub) {
 				return nil, mcp.ErrForbidden
 			}
 			return toMap(a), nil
@@ -201,14 +201,14 @@ func (s *Service) DecideAbsence(c identity.Claims, id, decision, comment string)
 		if a.ID != id {
 			continue
 		}
-		if a.ApproverID != c.Sub {
+		if !s.mayDecide(a.ApproverID, c.Sub) {
 			return nil, mcp.ErrForbidden
 		}
 		if a.Status != "pending" {
 			return nil, mcp.NewToolError("already_decided", "Решение по заявке уже принято")
 		}
 		now := s.now()
-		a.Status, a.Comment, a.DecidedAt = decision, comment, &now
+		a.Status, a.Comment, a.DecidedAt, a.DecidedBy = decision, comment, &now, c.Sub
 		if decision == "rejected" && a.Type == "day_off" {
 			s.balance[a.UserID] += a.Days
 		}

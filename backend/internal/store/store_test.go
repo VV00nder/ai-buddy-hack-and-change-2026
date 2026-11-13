@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,6 +119,26 @@ func contract(t *testing.T, s Store) {
 	_ = s.AddEvent(ctx, domain.Event{ID: "e1", UserID: "u1", Type: "question_asked", Props: map[string]any{"k": "v"}, At: t0})
 	if e, _ := s.Events(ctx); len(e) != 1 || e[0].Props["k"] != "v" {
 		t.Fatal("events")
+	}
+	// записи произвольного вида
+	_ = s.PutRecord(ctx, "quiz", "b", []byte(`{"id":"b"}`))
+	_ = s.PutRecord(ctx, "quiz", "a", []byte(`{"id":"a"}`))
+	_ = s.PutRecord(ctx, "quiz", "a", []byte(`{"id":"a","v":2}`))
+	if r, _ := s.Records(ctx, "quiz"); len(r) != 2 || !strings.Contains(string(r[0]), `"v": 2`) && !strings.Contains(string(r[0]), `"v":2`) {
+		t.Fatalf("records: %s", r)
+	}
+	if _, err := s.Record(ctx, "quiz", "none"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("record not found")
+	}
+	_ = s.DeleteRecord(ctx, "quiz", "a")
+	if r, _ := s.Records(ctx, "quiz"); len(r) != 1 {
+		t.Fatal("delete record")
+	}
+	if b, err := s.Record(ctx, "quiz", "b"); err != nil || !strings.Contains(string(b), "b") {
+		t.Fatal("record get")
+	}
+	if r, _ := s.Records(ctx, "empty"); len(r) != 0 {
+		t.Fatal("empty kind")
 	}
 }
 

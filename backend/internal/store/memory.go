@@ -19,12 +19,13 @@ type Memory struct {
 	faqs      []domain.FAQEntry
 	goals     map[string]domain.Goal
 	events    []domain.Event
+	records   map[string]map[string][]byte
 }
 
 // NewMemory создаёт пустое хранилище.
 func NewMemory() *Memory {
 	return &Memory{steps: map[string]map[string]domain.StepState{}, messages: map[string]domain.Message{},
-		actions: map[string]domain.Action{}, questions: map[string]domain.Question{}, goals: map[string]domain.Goal{}}
+		actions: map[string]domain.Action{}, questions: map[string]domain.Question{}, goals: map[string]domain.Goal{}, records: map[string]map[string][]byte{}}
 }
 
 // Ping всегда успешен.
@@ -260,4 +261,46 @@ func (m *Memory) Events(context.Context) ([]domain.Event, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return append([]domain.Event{}, m.events...), nil
+}
+
+func (m *Memory) PutRecord(_ context.Context, kind, id string, data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.records[kind] == nil {
+		m.records[kind] = map[string][]byte{}
+	}
+	m.records[kind][id] = append([]byte(nil), data...)
+	return nil
+}
+
+func (m *Memory) Record(_ context.Context, kind, id string) ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	b, ok := m.records[kind][id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return append([]byte(nil), b...), nil
+}
+
+func (m *Memory) Records(_ context.Context, kind string) ([][]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ids := make([]string, 0, len(m.records[kind]))
+	for id := range m.records[kind] {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := [][]byte{}
+	for _, id := range ids {
+		out = append(out, append([]byte(nil), m.records[kind][id]...))
+	}
+	return out, nil
+}
+
+func (m *Memory) DeleteRecord(_ context.Context, kind, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.records[kind], id)
+	return nil
 }

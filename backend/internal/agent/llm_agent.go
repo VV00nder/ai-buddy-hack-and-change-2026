@@ -11,6 +11,7 @@ import (
 	"aibuddy/internal/knowledge"
 	"aibuddy/internal/llm"
 	"aibuddy/internal/mcp"
+	"aibuddy/internal/onboarding"
 )
 
 // localTools — инструменты самого AI-buddy (поверх MCP-инструментов сервисов).
@@ -25,6 +26,17 @@ var localTools = []llm.Tool{
 	{Type: "function", Function: llm.FunctionSpec{Name: "goals_get",
 		Description: "Цели стажировки пользователя: формулировка, критерий успеха, срок, статус и прогресс.",
 		Parameters:  map[string]any{"type": "object", "properties": map[string]any{}}}},
+	{Type: "function", Function: llm.FunctionSpec{Name: "plan_step_done",
+		Description: "Отметить шаг плана адаптации выполненным. Вызывай, только если стажёр сам сказал, что сделал шаг. Шаги с тестом закрываются сдачей теста.",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{
+			"step": map[string]any{"type": "string", "description": "id шага из plan_get или его название"}}, "required": []string{"step"}}}},
+	{Type: "function", Function: llm.FunctionSpec{Name: "quiz_list",
+		Description: "Тесты на проверку знаний: название, инструкции, которые проверяет тест, сдан ли он пользователем.",
+		Parameters:  map[string]any{"type": "object", "properties": map[string]any{}}}},
+	{Type: "function", Function: llm.FunctionSpec{Name: "quiz_offer",
+		Description: "Показать под ответом кнопку «Пройти тест». Вызывай, когда стажёр хочет проверить знания или закончил тему, по которой есть тест.",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{
+			"quiz_id": map[string]any{"type": "string", "description": "id теста из quiz_list"}}, "required": []string{"quiz_id"}}}},
 	{Type: "function", Function: llm.FunctionSpec{Name: "ask_mentor",
 		Description: "Подготовить вопрос наставнику, если в базе знаний нет ответа. Стажёр подтвердит отправку.",
 		Parameters: map[string]any{"type": "object", "properties": map[string]any{
@@ -54,7 +66,7 @@ func (a *Agent) handleLLM(ctx context.Context, req Request) (Reply, error) {
 	tools := append([]llm.Tool{}, localTools...)
 	if mcpTools, err := a.d.Corp.ListTools(ctx, req.Token); err == nil {
 		for _, t := range mcpTools {
-			if strings.HasSuffix(t.Name, "_decide") { // решения принимаются только в интерфейсе руководителя
+			if strings.HasSuffix(t.Name, "_decide") || t.Name == "delegation_set" { // решения и права — только в интерфейсе руководителя
 				continue
 			}
 			tools = append(tools, llm.Tool{Type: "function", Function: llm.FunctionSpec{Name: t.Name, Description: t.Description, Parameters: t.InputSchema}})
@@ -144,6 +156,30 @@ func (a *Agent) runTool(ctx context.Context, req Request, tc llm.ToolCall, reply
 			return map[string]any{"error": "goals_unavailable"}
 		}
 		return map[string]any{"goals": goals}
+	case "plan_step_done":
+		return a.llmStepDone(ctx, req, args)
+	case "quiz_list":
+		if a.d.Quizzes == nil {
+			return map[string]any{"quizzes": []any{}}
+		}
+		qs, err := a.d.Quizzes(ctx, req.User)
+		if err != nil {
+			return map[string]any{"error": "quizzes_unavailable"}
+		}
+		return map[string]any{"quizzes": qs}
+	case "quiz_offer":
+		id, _ := args["quiz_id"].(string)
+		if a.d.Quizzes != nil {
+			if qs, err := a.d.Quizzes(ctx, req.User); err == nil {
+				for _, q := range qs {
+					if q.ID == id {
+						reply.QuizID = id
+						return map[string]any{"status": "button_shown", "title": q.Title}
+					}
+				}
+			}
+		}
+		return map[string]any{"error": "not_found"}
 	case "ask_mentor":
 		q, _ := args["question"].(string)
 		if q == "" {
@@ -178,6 +214,47 @@ func (a *Agent) runTool(ctx context.Context, req Request, tc llm.ToolCall, reply
 	}
 	if err != nil {
 		return map[string]any{"error": "service_unavailable"}
+	}
+	return out
+}
+
+func (a *Agent) llmStepDone(ctx context.Context, req Request, args map[string]any) map[string]any {
+	if a.d.Plan == nil || a.d.SetStep == nil || req.User.Role != domain.RoleIntern {
+		return map[string]any{"error": "not_allowed"}
+	}
+	ref, _ := args["step"].(string)
+	p, err := a.d.Plan(ctx, req.User)
+	if err != nil {
+		return map[string]any{"error": "plan_unavailable"}
+	}
+	var s *onboarding.StepView
+	for _, per := range p.Periods {
+		for i := range per.Steps {
+			if per.Steps[i].ID == ref {
+				s = &per.Steps[i]
+			}
+		}
+	}
+	if s == nil {
+		s = matchStep(p, ref)
+	}
+	switch {
+	case s == nil:
+		return map[string]any{"error": "step_not_found"}
+	case s.Status == domain.StepDone:
+		return map[string]any{"status": "already_done", "title": s.Title}
+	case s.Owner != "intern":
+		return map[string]any{"error": "mentor_step", "message": "Этот шаг отмечает наставник"}
+	case s.Quiz != "":
+		return map[string]any{"error": "quiz_step", "message": "Шаг закрывается сдачей теста", "quiz_id": s.Quiz}
+	}
+	np, err := a.d.SetStep(ctx, req.User, s.ID, domain.StepDone)
+	if err != nil {
+		return map[string]any{"error": "failed", "message": err.Error()}
+	}
+	out := map[string]any{"status": "done", "title": s.Title, "percent": np.Percent, "done": np.Done, "total": np.Total}
+	if np.Next != nil {
+		out["next"] = np.Next.Title
 	}
 	return out
 }

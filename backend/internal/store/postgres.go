@@ -20,6 +20,9 @@ var migration001 string
 //go:embed migrations/002_goals.sql
 var migration002 string
 
+//go:embed migrations/003_docs.sql
+var migration003 string
+
 // Postgres — хранилище в PostgreSQL.
 type Postgres struct{ db *sql.DB }
 
@@ -46,7 +49,7 @@ func OpenPostgres(ctx context.Context, dsn string, wait time.Duration) (*Postgre
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, migration001+"\n"+migration002); err != nil {
+	if _, err := db.ExecContext(ctx, migration001+"\n"+migration002+"\n"+migration003); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres migrate: %w", err)
 	}
@@ -58,7 +61,7 @@ func (p *Postgres) Close() error { return p.db.Close() }
 
 // Truncate очищает таблицы (для тестов и сброса демо).
 func (p *Postgres) Truncate(ctx context.Context) error {
-	_, err := p.db.ExecContext(ctx, `TRUNCATE step_states, messages, actions, questions, notifications, faq, events, goals`)
+	_, err := p.db.ExecContext(ctx, `TRUNCATE step_states, messages, actions, questions, notifications, faq, events, goals, records`)
 	return err
 }
 
@@ -230,4 +233,41 @@ func (p *Postgres) AddEvent(ctx context.Context, e domain.Event) error {
 
 func (p *Postgres) Events(ctx context.Context) ([]domain.Event, error) {
 	return getMany[domain.Event](ctx, p.db, `SELECT data FROM events ORDER BY at, id`)
+}
+
+func (p *Postgres) PutRecord(ctx context.Context, kind, id string, data []byte) error {
+	_, err := p.db.ExecContext(ctx, `INSERT INTO records (kind, id, updated_at, data) VALUES ($1,$2,now(),$3)
+		ON CONFLICT (kind, id) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`, kind, id, data)
+	return err
+}
+
+func (p *Postgres) Record(ctx context.Context, kind, id string) ([]byte, error) {
+	var b []byte
+	err := p.db.QueryRowContext(ctx, `SELECT data FROM records WHERE kind=$1 AND id=$2`, kind, id).Scan(&b)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return b, err
+}
+
+func (p *Postgres) Records(ctx context.Context, kind string) ([][]byte, error) {
+	rows, err := p.db.QueryContext(ctx, `SELECT data FROM records WHERE kind=$1 ORDER BY id`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := [][]byte{}
+	for rows.Next() {
+		var b []byte
+		if err := rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (p *Postgres) DeleteRecord(ctx context.Context, kind, id string) error {
+	_, err := p.db.ExecContext(ctx, `DELETE FROM records WHERE kind=$1 AND id=$2`, kind, id)
+	return err
 }

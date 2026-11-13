@@ -200,7 +200,7 @@ func (s *Service) ListAccess(c identity.Claims, scope string) (map[string]any, e
 	}
 	items := []AccessRequest{}
 	for _, r := range s.access {
-		if (scope == "approvals" && r.ApproverID == c.Sub && r.Status == "pending") || (scope != "approvals" && r.UserID == c.Sub) {
+		if (scope == "approvals" && s.mayDecide(r.ApproverID, c.Sub) && r.Status == "pending") || (scope != "approvals" && r.UserID == c.Sub) {
 			items = append(items, *r)
 		}
 	}
@@ -221,14 +221,14 @@ func (s *Service) DecideAccess(c identity.Claims, id, decision, comment string) 
 		if r.ID != id {
 			continue
 		}
-		if r.ApproverID != c.Sub {
+		if !s.mayDecide(r.ApproverID, c.Sub) {
 			return nil, mcp.ErrForbidden
 		}
 		if r.Status != "pending" {
 			return nil, mcp.NewToolError("already_decided", "Решение по заявке уже принято")
 		}
 		now := s.now()
-		r.Status, r.Comment, r.DecidedAt = decision, comment, &now
+		r.Status, r.Comment, r.DecidedAt, r.DecidedBy = decision, comment, &now, c.Sub
 		return toMap(r), nil
 	}
 	return nil, mcp.NewToolError("not_found", "Заявка не найдена")

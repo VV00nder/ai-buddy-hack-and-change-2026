@@ -3,6 +3,7 @@ id: team-delivery
 title: Команда «Авито Доставка: трекинг»: договорённости
 audience: intern,mentor,lead,hrbp
 team: delivery
+folder: Команды
 tags: команда, доставка, трекинг, дежурства
 ---
 ## Договорённости

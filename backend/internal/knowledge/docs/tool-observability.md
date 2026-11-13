@@ -3,6 +3,7 @@ id: tool-observability
 title: Grafana, Sentry, Observer и Redash: что и когда смотреть
 audience: all
 team: all
+folder: Инструменты
 tags: grafana, sentry, observer, redash, метрики, дашборд, ошибки, логи, мониторинг
 ---
 ## Grafana

@@ -30,7 +30,10 @@ func (a *App) PlanFor(ctx context.Context, u domain.User) (onboarding.Plan, erro
 	if err != nil {
 		return onboarding.Plan{}, err
 	}
-	return a.tpl.Build(u, states, a.now()), nil
+	t, customized := a.templateFor(ctx, u)
+	p := t.Build(u, states, a.now())
+	p.Customized = customized
+	return p, nil
 }
 
 // InternPlan — план стажёра для наставника/руководителя.
@@ -52,11 +55,12 @@ func (a *App) SetStep(ctx context.Context, actor domain.User, internID, stepID s
 	if !domain.ValidStepStatus(status) {
 		return onboarding.Plan{}, invalid("Неизвестный статус")
 	}
-	step, ok := a.tpl.Step(stepID)
+	intern, ok := a.userByID(ctx, internID)
 	if !ok {
 		return onboarding.Plan{}, ErrNotFound
 	}
-	intern, ok := a.userByID(ctx, internID)
+	tpl, _ := a.templateFor(ctx, intern)
+	step, ok := tpl.Step(stepID)
 	if !ok {
 		return onboarding.Plan{}, ErrNotFound
 	}
@@ -64,6 +68,9 @@ func (a *App) SetStep(ctx context.Context, actor domain.User, internID, stepID s
 	case actor.ID == intern.ID:
 		if step.Owner != "intern" {
 			return onboarding.Plan{}, invalid("Этот шаг отмечает наставник")
+		}
+		if step.Quiz != "" && status == domain.StepDone {
+			return onboarding.Plan{}, invalid("Этот шаг закроется сам, когда ты сдашь тест")
 		}
 	case actor.Role == domain.RoleMentor && intern.MentorID == actor.ID, actor.Role == domain.RoleLead && intern.LeadID == actor.ID:
 	default:
@@ -106,13 +113,14 @@ func (a *App) autoCompleteSteps(ctx context.Context, intern domain.User) {
 		done[s.StepID] = s.Status == domain.StepDone
 	}
 	changed := false
-	for _, id := range a.tpl.StepsCompletedByAccess(granted) {
+	tpl, _ := a.templateFor(ctx, intern)
+	for _, id := range tpl.StepsCompletedByAccess(granted) {
 		if done[id] {
 			continue
 		}
 		_ = a.store.SetStepState(ctx, domain.StepState{UserID: intern.ID, StepID: id, Status: domain.StepDone,
 			Note: "Отмечено автоматически: доступ выдан", UpdatedAt: a.now(), UpdatedBy: "ai-buddy"})
-		step, _ := a.tpl.Step(id)
+		step, _ := tpl.Step(id)
 		a.notify(ctx, intern.ID, "plan", "Шаг плана выполнен: "+step.Title, "/plan")
 		a.Track(ctx, intern.ID, "step_completed", map[string]any{"step": id, "by": "auto"})
 		changed = true

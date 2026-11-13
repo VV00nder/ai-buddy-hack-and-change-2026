@@ -46,4 +46,10 @@ type Store interface {
 
 	AddEvent(ctx context.Context, e domain.Event) error
 	Events(ctx context.Context) ([]domain.Event, error)
+
+	// Записи произвольного вида (JSON): инструкции, тесты, шаблоны, программы, права.
+	PutRecord(ctx context.Context, kind, id string, data []byte) error
+	Record(ctx context.Context, kind, id string) ([]byte, error)
+	Records(ctx context.Context, kind string) ([][]byte, error)
+	DeleteRecord(ctx context.Context, kind, id string) error
 }

@@ -60,9 +60,10 @@ func (a *App) Approvals(ctx context.Context, s kv.Session) ([]Approval, error) {
 
 var levelName = map[string]string{"read": "чтение", "edit": "редактирование", "admin": "администрирование"}
 
-// canApprove — согласующими бывают руководители, наставники (владельцы проектов) и инженеры (DevOps).
+// canApprove — согласующими бывают руководители, наставники (владельцы проектов),
+// инженеры (DevOps) и заместители руководителя; конкретного согласующего проверяет сервис заявок.
 func canApprove(u domain.User) bool {
-	return u.Role == domain.RoleLead || u.Role == domain.RoleMentor || u.Role == domain.RoleEngineer
+	return u.Role != domain.RoleIntern
 }
 
 // absenceRange — «Отгул на 12.11 (чт), 1 раб. день» или «Отпуск 14.12–18.12, 5 раб. дней».
@@ -247,6 +248,10 @@ type InternSummary struct {
 	OpenQuestions int         `json:"openQuestions"`
 	GoalsDone     int         `json:"goalsDone"`
 	GoalsTotal    int         `json:"goalsTotal"`
+	TemplateName  string      `json:"templateName"`
+	Customized    bool        `json:"customized"`
+	QuizzesPassed int         `json:"quizzesPassed"`
+	QuizzesFailed int         `json:"quizzesFailed"` // тесты, которые пока не сданы ни разу
 }
 
 // Team — стажёры, которых видит наставник, руководитель или HR BP.
@@ -284,6 +289,20 @@ func (a *App) Team(ctx context.Context, viewer domain.User) ([]InternSummary, er
 		}
 		if p.Next != nil {
 			s.NextStep = p.Next.Title
+		}
+		s.TemplateName, s.Customized = p.TemplateName, p.Customized
+		atts, _ := a.attemptsOf(ctx, u.ID)
+		passed, tried := map[string]bool{}, map[string]bool{}
+		for _, at := range atts {
+			tried[at.QuizID] = true
+			passed[at.QuizID] = passed[at.QuizID] || at.Passed
+		}
+		for id := range tried {
+			if passed[id] {
+				s.QuizzesPassed++
+			} else {
+				s.QuizzesFailed++
+			}
 		}
 		out = append(out, s)
 	}

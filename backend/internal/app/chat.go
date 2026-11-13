@@ -62,6 +62,7 @@ func (a *App) runAgent(s kv.Session, text string, history []domain.Message, am d
 	reply := a.agent.Handle(ctx, agent.Request{User: s.User, Token: s.Token, Text: text, History: history, Progress: progress})
 	reply = a.applyFlags(reply)
 	am.Text, am.Sources, am.Suggestions, am.Mode, am.Context = reply.Text, reply.Sources, reply.Suggestions, reply.Mode, reply.Context
+	am.QuizID = reply.QuizID
 	am.Status, am.UpdatedAt = domain.MsgDone, a.now()
 	if ctx.Err() != nil && am.Text == "" {
 		am.Status, am.Text = domain.MsgError, "Ответ занял слишком много времени. Попробуй переформулировать вопрос или повтори позже."

@@ -1,0 +1,345 @@
+{
+  "id": "intern-analyst",
+  "name": "Стажёр-аналитик",
+  "description": "Адаптация аналитика данных: доступы к отчётности, продуктовые метрики, SQL и A/B-тесты.",
+  "periods": [
+    {
+      "id": "week1",
+      "name": "1 неделя",
+      "fromDay": 0,
+      "toDay": 6
+    },
+    {
+      "id": "week2",
+      "name": "2 неделя",
+      "fromDay": 7,
+      "toDay": 13
+    },
+    {
+      "id": "month1",
+      "name": "1 месяц",
+      "fromDay": 14,
+      "toDay": 29
+    },
+    {
+      "id": "month2",
+      "name": "2 месяц",
+      "fromDay": 30,
+      "toDay": 59
+    },
+    {
+      "id": "month3",
+      "name": "3 месяц",
+      "fromDay": 60,
+      "toDay": 89
+    },
+    {
+      "id": "after3m",
+      "name": "После 3-х месяцев",
+      "fromDay": 90,
+      "toDay": 180
+    }
+  ],
+  "steps": [
+    {
+      "id": "w1-team",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Команда",
+      "title": "Познакомься с командой",
+      "description": "Узнай, кто есть кто, ритуалы команды и где общаться.",
+      "docs": [
+        "team-search",
+        "team-delivery"
+      ],
+      "prompt": "Расскажи про мою команду"
+    },
+    {
+      "id": "w1-mentor-chats",
+      "period": "week1",
+      "owner": "mentor",
+      "category": "Организационное",
+      "title": "Добавить стажёра во все чаты и каналы",
+      "description": "Наставник добавляет стажёра в рабочие чаты, в том числе закрытые."
+    },
+    {
+      "id": "w1-mentor-1on1",
+      "period": "week1",
+      "owner": "mentor",
+      "category": "Организационное",
+      "title": "Назначить регулярные 1:1",
+      "description": "Наставник назначает еженедельные встречи 1:1.",
+      "docs": [
+        "process-mentor"
+      ]
+    },
+    {
+      "id": "w1-goals",
+      "period": "week1",
+      "owner": "mentor",
+      "category": "Организационное",
+      "title": "Обсудить цели и план адаптации",
+      "description": "Цели на период адаптации, критерии успешной стажировки, OKR команды."
+    },
+    {
+      "id": "w1-mentor-notes",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Наставник",
+      "title": "Заведи конспект встреч с наставником",
+      "description": "Фиксируй информацию с 1:1: о компании, договорённости, обратную связь.",
+      "docs": [
+        "process-mentor"
+      ]
+    },
+    {
+      "id": "w1-access-base",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Доступы",
+      "title": "Получи базовые доступы: VPN, Jira, Confluence",
+      "description": "Базовый набор выдаётся автоматически — запроси через AI-buddy.",
+      "auto": {
+        "access": [
+          "vpn",
+          "jira",
+          "confluence-team"
+        ]
+      },
+      "docs": [
+        "process-access"
+      ],
+      "prompt": "Какие доступы мне нужны в первую неделю?"
+    },
+    {
+      "id": "w1-cluster-space",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Доступы",
+      "title": "Запроси доступ в пространство кластера и изучи его",
+      "description": "Confluence кластера: архитектура сервисов. Согласует руководитель.",
+      "auto": {
+        "access": [
+          "confluence-cluster"
+        ]
+      },
+      "docs": [
+        "process-access"
+      ],
+      "prompt": "Запроси доступ к Confluence кластера"
+    },
+    {
+      "id": "w1-tech-dep",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Доступы",
+      "title": "Вступи в канал Tech-dep",
+      "description": "Новости технического департамента.",
+      "auto": {
+        "access": [
+          "channel-tech-dep"
+        ]
+      },
+      "prompt": "Добавь меня в канал Tech-dep"
+    },
+    {
+      "period": "week1",
+      "owner": "intern",
+      "id": "w1-redash",
+      "category": "Доступы",
+      "title": "Получи доступ к Redash",
+      "description": "Redash — основной инструмент отчётности. Доступ согласует руководитель.",
+      "docs": [
+        "process-access"
+      ],
+      "prompt": "Запроси доступ к Redash",
+      "auto": {
+        "access": [
+          "redash"
+        ]
+      }
+    },
+    {
+      "period": "week1",
+      "owner": "intern",
+      "id": "w1-data-principles",
+      "category": "Данные",
+      "title": "Изучи правила работы с данными",
+      "description": "Какие данные можно выгружать, где хранить отчёты и как обезличивать выборки.",
+      "docs": [
+        "security-data"
+      ]
+    },
+    {
+      "period": "week1",
+      "owner": "intern",
+      "id": "w1-grafana-a",
+      "category": "Инструменты",
+      "title": "Найди дашборды команды в Grafana",
+      "description": "Посмотри, какие продуктовые и технические метрики команда уже отслеживает.",
+      "docs": [
+        "tool-observability"
+      ],
+      "auto": {
+        "access": [
+          "grafana"
+        ]
+      }
+    },
+    {
+      "id": "w1-quiz",
+      "period": "week1",
+      "owner": "intern",
+      "category": "Проверка знаний",
+      "title": "Пройди тест «Доступы и правила»",
+      "description": "Проверь, как усвоены доступы, отгулы и работа с данными. Шаг отметится сам после сдачи.",
+      "quiz": "quiz-week1-analyst",
+      "docs": [
+        "process-access",
+        "process-day-off",
+        "security-data"
+      ]
+    },
+    {
+      "id": "w2-tracker",
+      "period": "week2",
+      "owner": "intern",
+      "category": "Организационное",
+      "title": "Запроси трекер прогресса и внеси цели",
+      "description": "Трекер — у куратора стажировки.",
+      "docs": [
+        "faq-general"
+      ]
+    },
+    {
+      "id": "w2-docs",
+      "period": "week2",
+      "owner": "intern",
+      "category": "Команда",
+      "title": "Изучи документы и мануалы команды",
+      "description": "То, чем поделились наставник и руководитель."
+    },
+    {
+      "period": "week2",
+      "owner": "intern",
+      "id": "w2-dwh",
+      "category": "Данные",
+      "title": "Изучи схему хранилища и витрины данных",
+      "description": "Разберись, из каких таблиц строятся ключевые отчёты команды."
+    },
+    {
+      "id": "m1-data",
+      "period": "month1",
+      "owner": "intern",
+      "category": "Безопасность",
+      "title": "Изучи основы защиты данных",
+      "description": "Лендинг «Защита данных», памятка по раскрытию информации, политика по КИ.",
+      "docs": [
+        "security-data"
+      ]
+    },
+    {
+      "id": "m1-agile",
+      "period": "month1",
+      "owner": "intern",
+      "category": "Процессы",
+      "title": "Пройди курс по Agile в Авито",
+      "description": "Agile и Scrum в работе над продуктами."
+    },
+    {
+      "period": "month1",
+      "owner": "intern",
+      "id": "m1-metrics",
+      "category": "Продукт",
+      "title": "Изучи метрики продукта команды",
+      "description": "Составь список North Star и вспомогательных метрик, обсуди его с наставником."
+    },
+    {
+      "id": "m1-zbp",
+      "period": "month1",
+      "owner": "intern",
+      "category": "Процессы",
+      "title": "Изучи Zero Bug Policy",
+      "description": "Как в Авито работают с багами.",
+      "docs": [
+        "process-engineering"
+      ]
+    },
+    {
+      "period": "month1",
+      "owner": "intern",
+      "id": "m1-sql",
+      "category": "Данные",
+      "title": "Пройди курс по SQL для аналитиков",
+      "description": "Оконные функции, CTE и оптимизация запросов к большим таблицам."
+    },
+    {
+      "id": "m1-quiz",
+      "period": "month1",
+      "owner": "intern",
+      "category": "Проверка знаний",
+      "title": "Пройди тест «Данные и качество»",
+      "description": "Проверь, как усвоены защита данных и Zero Bug Policy. Шаг отметится сам после сдачи теста.",
+      "quiz": "quiz-security",
+      "docs": [
+        "security-data",
+        "process-engineering"
+      ]
+    },
+    {
+      "id": "m2-practice",
+      "period": "month2",
+      "owner": "intern",
+      "category": "Организационное",
+      "title": "Изучи памятку о закрытии практики",
+      "description": "Как закрывать учебную практику и писать работы по Авито.",
+      "docs": [
+        "faq-general"
+      ]
+    },
+    {
+      "period": "month2",
+      "owner": "intern",
+      "id": "m2-report",
+      "category": "Продукт",
+      "title": "Подготовь первый аналитический отчёт",
+      "description": "Выбери вопрос вместе с наставником, собери данные и покажи выводы команде."
+    },
+    {
+      "period": "month3",
+      "owner": "intern",
+      "id": "m3-ab",
+      "category": "Продукт",
+      "title": "Пройди курс по A/B-тестированию",
+      "description": "Дизайн эксперимента, мощность теста и интерпретация результатов."
+    },
+    {
+      "id": "m3-community",
+      "period": "month3",
+      "owner": "intern",
+      "category": "Команда",
+      "title": "Найди своё сообщество в Центре сообществ",
+      "description": "Профессиональные сообщества внутри компании."
+    },
+    {
+      "id": "a3-equator",
+      "period": "after3m",
+      "owner": "intern",
+      "category": "Экватор",
+      "title": "Подготовься к экваторной встрече",
+      "description": "Мастер-классы, презентация, речь, репетиция.",
+      "docs": [
+        "process-equator"
+      ],
+      "prompt": "Как подготовиться к экватору?"
+    },
+    {
+      "id": "a3-survey",
+      "period": "after3m",
+      "owner": "intern",
+      "category": "Экватор",
+      "title": "Пройди опрос о стажировке",
+      "description": "Обратная связь о программе."
+    }
+  ]
+}

@@ -57,7 +57,8 @@ func simple(f func(identity.Claims, idArgs) (map[string]any, error)) mcp.Handler
 var (
 	leads = []string{string(domain.RoleLead)}
 	// approvers — роли, которые могут быть согласующими доступов; конкретного согласующего проверяет сервис.
-	approvers = []string{string(domain.RoleLead), string(domain.RoleMentor), string(domain.RoleEngineer)}
+	// Заместитель руководителя по согласованию может быть в любой роли, кроме стажёра.
+	approvers = []string{string(domain.RoleLead), string(domain.RoleMentor), string(domain.RoleEngineer), string(domain.RoleHRBP)}
 )
 
 // MCPServer публикует корпоративные сервисы как MCP-инструменты.
@@ -96,9 +97,9 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 		{Info: mcp.ToolInfo{Name: "absence_get", Title: "Статус заявки", Description: "Заявка на отсутствие по идентификатору.",
 			InputSchema: schema(map[string]any{"id": str("ID заявки")}, "id"), Annotations: map[string]any{"readOnlyHint": true}},
 			Handler: simple(func(c identity.Claims, a idArgs) (map[string]any, error) { return s.GetAbsence(c, a.ID) })},
-		{Info: mcp.ToolInfo{Name: "absence_decide", Title: "Решение по отсутствию", Description: "Согласовать или отклонить заявку (руководитель).",
+		{Info: mcp.ToolInfo{Name: "absence_decide", Title: "Решение по отсутствию", Description: "Согласовать или отклонить заявку (руководитель или его заместитель).",
 			InputSchema: schema(map[string]any{"id": str("ID заявки"), "decision": str("Решение", "approved", "rejected"), "comment": str("Комментарий")}, "id", "decision")},
-			Roles: leads,
+			Roles: approvers,
 			Handler: simple(func(c identity.Claims, a idArgs) (map[string]any, error) {
 				return s.DecideAbsence(c, a.ID, a.Decision, a.Comment)
 			})},
@@ -127,6 +128,23 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 			Handler: simple(func(c identity.Claims, a idArgs) (map[string]any, error) {
 				return s.DecideAccess(c, a.ID, a.Decision, a.Comment)
 			})},
+		{Info: mcp.ToolInfo{Name: "delegation_set", Title: "Заместитель по согласованию",
+			Description: "Руководитель передаёт сотруднику своей команды право согласовывать свои заявки (enabled=false — забрать).",
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "enabled": map[string]any{"type": "boolean"}}, "user_id", "enabled")},
+			Roles: leads,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID  string `json:"user_id"`
+					Enabled bool   `json:"enabled"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.SetDeputy(c, in.UserID, in.Enabled)
+			}},
+		{Info: mcp.ToolInfo{Name: "delegation_list", Title: "Заместители", Description: "Мои заместители по согласованию и руководители, за которых я согласую.",
+			Annotations: map[string]any{"readOnlyHint": true}},
+			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Deputies(c) })},
 	}
 	for _, t := range tools {
 		srv.Register(t)

@@ -52,18 +52,18 @@ func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 	e.corpTS = httptest.NewServer(svc.Handler(signer, "buddy2026", "adm"))
 	t.Cleanup(e.corpTS.Close)
 	kb, _ := knowledge.Load()
-	tpl, _ := onboarding.LoadTemplate()
 	e.st = store.NewMemory()
 	corpClient := mcp.NewClient(e.corpTS.URL+"/mcp", 2*time.Second)
-	plan := func(ctx context.Context, u domain.User) (onboarding.Plan, error) {
-		s, err := e.st.StepStates(ctx, u.ID)
-		return tpl.Build(u, s, now()), err
-	}
+	plan := func(ctx context.Context, u domain.User) (onboarding.Plan, error) { return e.app.PlanFor(ctx, u) }
 	goals := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return e.st.Goals(ctx, u.ID) }
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now})
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now,
+		SetStep: func(ctx context.Context, u domain.User, step string, st domain.StepStatus) (onboarding.Plan, error) {
+			return e.app.SetStep(ctx, u, u.ID, step, st, "")
+		},
+		Quizzes: func(ctx context.Context, u domain.User) ([]agent.QuizRef, error) { return e.app.QuizRefs(ctx, u) }})
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.app = app.New(app.Config{CorpBaseURL: e.corpTS.URL, MsgRateLimit: 30},
-		app.Deps{Store: e.st, KV: kv.NewMemory(now), Corp: corpClient, KB: kb, Tpl: tpl, Agent: ag, Hub: events.NewHub(), Flags: ff, Now: now, Log: log})
+		app.Deps{Store: e.st, KV: kv.NewMemory(now), Corp: corpClient, KB: kb, Agent: ag, Hub: events.NewHub(), Flags: ff, Now: now, Log: log})
 	e.ts = httptest.NewServer(New(e.app, kb, log, webDir, false).Handler())
 	t.Cleanup(e.ts.Close)
 	return e
@@ -661,7 +661,9 @@ func TestDevopsApproval(t *testing.T) {
 	if code := pavel.do("GET", "/api/approvals", nil, nil); code != 200 {
 		t.Fatal("engineer approvals")
 	}
-	if code := e.login("elena").do("GET", "/api/approvals", nil, nil); code != 403 {
+	// HR BP без делегирования видит пустой список: решать за руководителя он не может
+	var empty struct{ Approvals []app.Approval }
+	if code := e.login("elena").do("GET", "/api/approvals", nil, &empty); code != 200 || len(empty.Approvals) != 0 {
 		t.Fatal("hrbp approvals")
 	}
 	_, act := anna.ask("нужен доступ к staging кластеру на редактирование для отладки индексатора поиска")
@@ -677,8 +679,14 @@ func TestDevopsApproval(t *testing.T) {
 	if code := pavel.do("POST", "/api/approvals/access/"+ap.Approvals[0].ExternalID, map[string]any{"approve": true}, nil); code != 200 {
 		t.Fatal("devops decide")
 	}
-	// инженер не согласует отсутствия
-	if code := pavel.do("POST", "/api/approvals/absence/ABS-1", map[string]any{"approve": true}, nil); code != 403 {
+	// инженер не согласует чужие отсутствия
+	_, abs := anna.ask("хочу отгул 16 ноября")
+	if abs == nil {
+		t.Fatal("absence proposal")
+	}
+	var conf struct{ Action domain.Action }
+	anna.do("POST", "/api/actions/"+abs.ID+"/confirm", nil, &conf)
+	if code := pavel.do("POST", "/api/approvals/absence/"+conf.Action.ExternalID, map[string]any{"approve": true}, nil); code != 403 {
 		t.Fatalf("engineer absence: %d", code)
 	}
 }

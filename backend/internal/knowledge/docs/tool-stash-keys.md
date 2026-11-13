@@ -3,6 +3,7 @@ id: tool-stash-keys
 title: SSH-ключи в Stash
 audience: all
 team: all
+folder: Инструменты
 tags: stash, ssh, ключ, ключи, git, репозиторий, bitbucket
 ---
 ## Как добавить ключ

@@ -91,9 +91,11 @@ type Message struct {
 	Sources     []Source      `json:"sources,omitempty"`
 	ActionID    string        `json:"actionId,omitempty"`
 	Suggestions []string      `json:"suggestions,omitempty"`
-	Trace       []TraceItem   `json:"trace,omitempty"`
-	Mode        string        `json:"mode,omitempty"` // llm | offline
-	Feedback    *bool         `json:"feedback,omitempty"`
+	// QuizID — тест, который ассистент предлагает пройти (кнопка в сообщении).
+	QuizID   string      `json:"quizId,omitempty"`
+	Trace    []TraceItem `json:"trace,omitempty"`
+	Mode     string      `json:"mode,omitempty"` // llm | offline
+	Feedback *bool       `json:"feedback,omitempty"`
 	// Context — служебное состояние диалога (например, ассистент ждёт дату отгула).
 	Context   map[string]string `json:"context,omitempty"`
 	CreatedAt time.Time         `json:"createdAt"`

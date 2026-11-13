@@ -19,6 +19,8 @@ import (
 	"aibuddy/internal/domain"
 	"aibuddy/internal/knowledge"
 	"aibuddy/internal/kv"
+	"aibuddy/internal/onboarding"
+	"aibuddy/internal/quiz"
 )
 
 func init() {
@@ -91,6 +93,28 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/insights", s.insights)
 	auth("GET /api/kb", s.kbList)
 	auth("GET /api/kb/{id}", s.kbGet)
+	auth("POST /api/kb", s.kbSave)
+	auth("PUT /api/kb/{id}", s.kbSave)
+	auth("DELETE /api/kb/{id}", s.kbDelete)
+	auth("POST /api/kb/folders", s.folderCreate)
+	auth("DELETE /api/kb/folders", s.folderDelete)
+	auth("GET /api/quizzes", s.quizzes)
+	auth("GET /api/quizzes/{id}", s.quizTake)
+	auth("GET /api/quizzes/{id}/edit", s.quizEdit)
+	auth("POST /api/quizzes", s.quizSave)
+	auth("PUT /api/quizzes/{id}", s.quizSave)
+	auth("DELETE /api/quizzes/{id}", s.quizDelete)
+	auth("POST /api/quizzes/{id}/submit", s.quizSubmit)
+	auth("GET /api/quiz-results", s.quizResults)
+	auth("GET /api/templates", s.templates)
+	auth("POST /api/templates", s.templateSave)
+	auth("PUT /api/templates/{id}", s.templateSave)
+	auth("DELETE /api/templates/{id}", s.templateDelete)
+	auth("GET /api/team/{intern}/program", s.program)
+	auth("PUT /api/team/{intern}/program", s.programSave)
+	auth("POST /api/team/{intern}/program/assign", s.programAssign)
+	auth("GET /api/rights", s.rights)
+	auth("POST /api/rights", s.rightSet)
 	auth("GET /api/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, 404, "not_found", "Метод не найден")
@@ -260,7 +284,8 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"user": sessionFrom(r).User})
+	sess := sessionFrom(r)
+	writeJSON(w, 200, map[string]any{"user": sess.User, "perms": s.app.Perms(r.Context(), sess)})
 }
 
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
@@ -506,18 +531,47 @@ func (s *Server) insights(w http.ResponseWriter, r *http.Request) {
 }
 
 type docView struct {
-	ID       string              `json:"id"`
-	Title    string              `json:"title"`
-	Tags     []string            `json:"tags"`
-	Sections []knowledge.Section `json:"sections,omitempty"`
+	ID        string              `json:"id"`
+	Title     string              `json:"title"`
+	Tags      []string            `json:"tags"`
+	Folder    string              `json:"folder"`
+	Custom    bool                `json:"custom"`
+	Editable  bool                `json:"editable"`
+	Audience  []string            `json:"audience,omitempty"`
+	Body      string              `json:"body,omitempty"`
+	UpdatedBy string              `json:"updatedBy,omitempty"`
+	UpdatedAt string              `json:"updatedAt,omitempty"`
+	Sections  []knowledge.Section `json:"sections,omitempty"`
+}
+
+func (s *Server) docView(r *http.Request, d *knowledge.Doc, full bool) docView {
+	u := sessionFrom(r).User
+	v := docView{ID: d.ID, Title: d.Title, Tags: d.Tags, Folder: d.Folder, Custom: d.Custom, Editable: s.app.CanEditDoc(r.Context(), u, d),
+		UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt}
+	if v.Tags == nil {
+		v.Tags = []string{}
+	}
+	if full {
+		v.Sections = d.Sections
+		if v.Editable {
+			v.Body, v.Audience = d.Body, d.Audience
+		}
+	}
+	return v
 }
 
 func (s *Server) kbList(w http.ResponseWriter, r *http.Request) {
+	u := sessionFrom(r).User
 	out := []docView{}
-	for _, d := range s.kb.List(sessionFrom(r).User) {
-		out = append(out, docView{ID: d.ID, Title: d.Title, Tags: d.Tags})
+	for _, d := range s.kb.Filter(r.URL.Query().Get("q"), u) {
+		out = append(out, s.docView(r, d, false))
 	}
-	writeJSON(w, 200, map[string]any{"docs": out})
+	folders, err := s.app.Folders(r.Context(), u)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"docs": out, "folders": folders})
 }
 
 func (s *Server) kbGet(w http.ResponseWriter, r *http.Request) {
@@ -526,7 +580,233 @@ func (s *Server) kbGet(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, app.ErrNotFound)
 		return
 	}
-	writeJSON(w, 200, docView{ID: d.ID, Title: d.Title, Tags: d.Tags, Sections: d.Sections})
+	writeJSON(w, 200, s.docView(r, d, true))
+}
+
+func (s *Server) kbSave(w http.ResponseWriter, r *http.Request) {
+	var in app.DocInput
+	if !decode(w, r, &in) {
+		return
+	}
+	d, err := s.app.SaveDoc(r.Context(), sessionFrom(r).User, r.PathValue("id"), in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	code := 200
+	if r.Method == http.MethodPost {
+		code = 201
+	}
+	writeJSON(w, code, s.docView(r, d, true))
+}
+
+func (s *Server) kbDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteDoc(r.Context(), sessionFrom(r).User, r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) folderCreate(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Path string `json:"path"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	f, err := s.app.CreateFolder(r.Context(), sessionFrom(r).User, in.Path)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 201, map[string]any{"folders": f})
+}
+
+func (s *Server) folderDelete(w http.ResponseWriter, r *http.Request) {
+	f, err := s.app.DeleteFolder(r.Context(), sessionFrom(r).User, r.URL.Query().Get("path"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"folders": f})
+}
+
+func (s *Server) quizzes(w http.ResponseWriter, r *http.Request) {
+	q, err := s.app.Quizzes(r.Context(), sessionFrom(r).User)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"quizzes": q})
+}
+
+func (s *Server) quizTake(w http.ResponseWriter, r *http.Request) {
+	q, err := s.app.QuizToTake(r.Context(), sessionFrom(r).User, r.PathValue("id"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, q)
+}
+
+func (s *Server) quizEdit(w http.ResponseWriter, r *http.Request) {
+	q, err := s.app.QuizToEdit(r.Context(), sessionFrom(r).User, r.PathValue("id"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, q)
+}
+
+func (s *Server) quizSave(w http.ResponseWriter, r *http.Request) {
+	var in quiz.Quiz
+	if !decode(w, r, &in) {
+		return
+	}
+	in.ID = r.PathValue("id")
+	q, err := s.app.SaveQuiz(r.Context(), sessionFrom(r).User, in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	code := 200
+	if r.Method == http.MethodPost {
+		code = 201
+	}
+	writeJSON(w, code, q)
+}
+
+func (s *Server) quizDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteQuiz(r.Context(), sessionFrom(r).User, r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) quizSubmit(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Answers []int `json:"answers"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	res, err := s.app.SubmitQuiz(r.Context(), sessionFrom(r).User, r.PathValue("id"), in.Answers)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func (s *Server) quizResults(w http.ResponseWriter, r *http.Request) {
+	res, err := s.app.QuizResults(r.Context(), sessionFrom(r).User, r.URL.Query().Get("internId"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"attempts": res})
+}
+
+func (s *Server) templates(w http.ResponseWriter, r *http.Request) {
+	t, err := s.app.Templates(r.Context(), sessionFrom(r).User)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"templates": t})
+}
+
+func (s *Server) templateSave(w http.ResponseWriter, r *http.Request) {
+	var in onboarding.Template
+	if !decode(w, r, &in) {
+		return
+	}
+	in.ID = r.PathValue("id")
+	t, err := s.app.SaveTemplate(r.Context(), sessionFrom(r).User, in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	code := 200
+	if r.Method == http.MethodPost {
+		code = 201
+	}
+	writeJSON(w, code, t)
+}
+
+func (s *Server) templateDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteTemplate(r.Context(), sessionFrom(r).User, r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) program(w http.ResponseWriter, r *http.Request) {
+	p, err := s.app.ProgramOf(r.Context(), sessionFrom(r).User, r.PathValue("intern"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) programSave(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Steps []onboarding.Step `json:"steps"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	p, err := s.app.SaveProgram(r.Context(), sessionFrom(r).User, r.PathValue("intern"), in.Steps)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) programAssign(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		TemplateID string `json:"templateId"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	p, err := s.app.AssignTemplate(r.Context(), sessionFrom(r).User, r.PathValue("intern"), in.TemplateID)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *Server) rights(w http.ResponseWriter, r *http.Request) {
+	m, err := s.app.Rights(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"members": m})
+}
+
+func (s *Server) rightSet(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		UserID  string `json:"userId"`
+		Perm    string `json:"perm"`
+		Enabled bool   `json:"enabled"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	m, err := s.app.SetRight(r.Context(), sessionFrom(r), in.UserID, in.Perm, in.Enabled)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"members": m})
 }
 
 // events — поток обновлений (Server-Sent Events).

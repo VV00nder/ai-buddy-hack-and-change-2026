@@ -3,6 +3,7 @@ id: tool-avito-cli
 title: Настройка avito-cli
 audience: all
 team: all
+folder: Инструменты
 tags: avito-cli, cli, консоль, настройка, установка, инструмент
 ---
 ## Что это

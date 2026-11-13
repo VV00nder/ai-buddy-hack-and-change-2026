@@ -58,6 +58,7 @@ type Absence struct {
 	Days       int        `json:"days"`
 	Reason     string     `json:"reason,omitempty"`
 	Status     string     `json:"status"` // pending | approved | rejected
+	DecidedBy  string     `json:"decidedBy,omitempty"`
 	ApproverID string     `json:"approverId"`
 	Approver   string     `json:"approver"`
 	Comment    string     `json:"comment,omitempty"`
@@ -77,6 +78,7 @@ type AccessRequest struct {
 	ApproverRole  string     `json:"approverRole,omitempty"`
 	Justification string     `json:"justification,omitempty"`
 	Status        string     `json:"status"` // granted | pending | rejected
+	DecidedBy     string     `json:"decidedBy,omitempty"`
 	ApproverID    string     `json:"approverId,omitempty"`
 	Approver      string     `json:"approver,omitempty"`
 	Comment       string     `json:"comment,omitempty"`
@@ -109,7 +111,9 @@ type Service struct {
 	owners        map[string]string
 	absences      []*Absence
 	access        []*AccessRequest
-	seq           int
+	// deputies — кому руководитель доверил согласование своих заявок: lead → {user}.
+	deputies map[string]map[string]bool
+	seq      int
 	// Outage имитирует недоступность сервиса (для демонстрации обработки сбоев).
 	outage bool
 }
@@ -129,7 +133,7 @@ func New(now func() time.Time, loc *time.Location) (*Service, error) {
 	}
 	s := &Service{now: now, loc: loc, teams: map[string]Team{}, users: map[string]*Person{},
 		byLogin: map[string]*Person{}, balance: map[string]int{}, catalog: f.AccessCatalog,
-		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners}
+		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners, deputies: map[string]map[string]bool{}}
 	today := dayOf(now().In(loc))
 	for _, t := range f.Teams {
 		s.teams[t.ID] = t
