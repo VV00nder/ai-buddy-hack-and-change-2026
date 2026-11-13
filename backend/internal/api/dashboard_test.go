@@ -21,6 +21,10 @@ func TestLeadDashboard(t *testing.T) {
 		t.Fatal("exception proposal")
 	}
 	anna.do("POST", "/api/actions/"+exc.ID+"/confirm", nil, nil)
+	// вопрос наставнику — не согласование: в заявки стажёра не попадает
+	if _, q := anna.ask("спроси наставника: где тестовый стенд?"); q != nil {
+		anna.do("POST", "/api/actions/"+q.ID+"/confirm", nil, nil)
+	}
 	// время идёт: заявки висят больше суток
 	e.clock = e.clock.Add(30 * time.Hour)
 	maria, anna, oleg = e.login("maria"), e.login("anna"), e.login("oleg")

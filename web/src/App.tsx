@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ApiError } from './api/client';
 import { Login } from './components/Login';
 import { Shell } from './components/Shell';
+import { Waiting } from './components/Waiting';
 import { keys, makeQueryClient, useMe } from './hooks/queries';
 
 export function App({ client }: { client?: ReturnType<typeof makeQueryClient> }) {
@@ -43,5 +44,6 @@ export function Root() {
       </div>
     );
   }
+  if (me.data.user.role === 'newcomer') return <Waiting user={me.data.user} />;
   return <Shell user={me.data.user} />;
 }

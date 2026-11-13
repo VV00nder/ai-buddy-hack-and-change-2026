@@ -29,6 +29,8 @@ export const keys = {
   department: ['department'] as const,
   goals: (internId = '') => ['goals', internId] as const,
   doc: (id: string) => ['doc', id] as const,
+  dashboard: ['dashboard'] as const,
+  internRequests: (id: string) => ['internRequests', id] as const,
 };
 
 export function makeQueryClient() {
@@ -85,6 +87,8 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
       const n = S.Notification.safeParse(u.data);
       if (n.success) {
         qc.setQueryData<{ notifications: S.Notification[] }>(keys.notifications, (s) => ({ notifications: [n.data, ...(s?.notifications ?? [])] }));
+        // кабинет руководителя собирает всё сразу — обновляем его на любое событие
+        void qc.invalidateQueries({ queryKey: keys.dashboard });
         // права и программы меняют руководитель и наставник — обновляем зависящие от них данные
         if (n.data.kind === 'rights') void qc.invalidateQueries({ queryKey: keys.me });
         // перевод в другой отдел или новый сотрудник: профиль, план и команда меняются
@@ -113,6 +117,8 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
       break;
     case 'approval':
       void qc.invalidateQueries({ queryKey: keys.approvals });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+      void qc.invalidateQueries({ queryKey: ['internRequests'] });
       break;
     case 'question':
       void qc.invalidateQueries({ queryKey: keys.inbox });
@@ -205,6 +211,9 @@ export function useSetStep() {
       if (v.internId) qc.setQueryData(keys.internPlan(v.internId), (old: { plan: S.Plan; intern: S.User } | undefined) => (old ? { ...old, plan } : old));
       else qc.setQueryData(keys.plan, plan);
       void qc.invalidateQueries({ queryKey: keys.team });
+      // задачи целей, связанные с шагами плана, закрываются вместе с шагом
+      void qc.invalidateQueries({ queryKey: ['goals'] });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
     },
     onError: (e) => toast(e instanceof Error ? e.message : 'Ошибка', 'error'),
   });

@@ -19,6 +19,7 @@ import { AttemptAnswers, QuizResultsPanel, TeamQuizResults } from './QuizResults
 import { QuizEditor, QuizForm, QuizReview, QuizRunner, Quizzes } from './Quizzes';
 import { Department, Rights } from './Rights';
 import { Register } from './Login';
+import { Waiting } from './Waiting';
 import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
@@ -85,13 +86,36 @@ function seeded() {
   qc.setQueryData(['auth-teams'], { teams: [{ id: 'search', name: 'Поиск объявлений', leadId: 'u-maria', leadName: 'Мария Волкова' }] });
   qc.setQueryData(keys.department, {
     members: [anna, { ...oleg, email: 'oleg@example.com', registered: true }],
+    newcomers: [{ ...anna, id: 'u-new', name: 'Пётр Сидоров', role: 'newcomer', team: '', email: 'petr@example.com', registered: true }],
+    mentors: [oleg],
     teams: [{ id: 'search', name: 'Поиск объявлений', leadId: 'u-maria', leadName: 'Мария Волкова' }, { id: 'delivery', name: 'Доставка', leadId: 'u-sergey', leadName: 'Сергей' }],
   });
   qc.setQueryData(keys.rights, { members: [{ user: maria, perms: ['kb'] }, { user: { ...maria, id: 'u-elena', name: 'Елена', role: 'hrbp' }, perms: [] }] });
   qc.setQueryData(['demo-users'], { users: [anna, maria], password: 'buddy2026' });
-  const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 40, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
+  const tasks = [
+    { id: 't1', title: 'Запросить доступ к Stash', stepId: 's1', done: true },
+    { id: 't2', title: 'Сделать MR', done: false },
+  ];
+  const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 50, tasks, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
   qc.setQueryData(keys.goals(), { goals: [goal, { ...goal, id: 'g2', title: 'Экватор', status: 'done', progress: 100, note: undefined }] });
   qc.setQueryData(keys.goals('u-anna'), { goals: [] });
+  const internCard = (extra = {}) => ({
+    user: anna, day: 4, percent: 33, done: 1, total: 3, overdue: 1, nextStep: 'Stash', openQuestions: 1, goalsDone: 1, goalsTotal: 2,
+    mentorName: 'Олег Кузнецов', pendingApprovals: 1, waitingHours: 30, openRequests: 2, alerts: ['отстаёт от плана: просрочено 1', 'ждёт вашего решения: 1 (уже 1 дн)'], ...extra,
+  });
+  qc.setQueryData(keys.dashboard, {
+    interns: [internCard(), internCard({ user: { ...anna, id: 'u-x', name: 'Иван' }, overdue: 0, pendingApprovals: 0, openRequests: 0, goalsTotal: 0, alerts: [], quizzesPassed: 1, quizzesFailed: 1 })],
+    approvals: [{ kind: 'access', externalId: 'ACC-7', userId: 'u-anna', userName: 'Анна Смирнова', title: 'Kubernetes, администрирование', waitingHours: 30, details: { justification: 'нужно для отладки', exception: 'Стажёрам админ-доступ не выдаётся.' } }],
+    reminders: [{ id: 'r1', ownerId: 'u-maria', text: 'Проверить SEARCH-101', at: '2026-11-14T06:00:00Z', sent: false, created: '' }],
+    newcomers: 1,
+  });
+  qc.setQueryData(keys.internRequests('u-anna'), {
+    requests: [
+      { id: 'act1', kind: 'access', title: 'Доступ: Stash', status: 'approved', externalId: 'ACC-1', comment: 'ок', createdAt: '2026-11-10T10:00:00Z', awaitingMe: false },
+      { id: 'act2', kind: 'absence', title: 'Отгул 13.11', status: 'submitted', externalId: 'ABS-1', createdAt: '2026-11-11T10:00:00Z', awaitingMe: true },
+    ],
+  });
+  qc.setQueryData(['quizRun', 'quiz-dayoff'], qc.getQueryData(keys.quiz('quiz-dayoff')));
   return qc;
 }
 
@@ -171,12 +195,15 @@ test('plan and today panel', () => {
   const lead = html(<PlanView internId="u-anna" />);
   assert.match(lead, /Анна Смирнова/);
   assert.match(lead, /Поставьте стажёру/);
-  assert.match(lead, /Добавить цель/);
+  assert.match(lead, /\+ цель/);
   const own = html(<PlanView />);
   assert.match(own, /Цели стажировки/);
   assert.match(own, /Критерий успеха: MR выкачен на staging/);
   assert.match(own, /1 из 2 выполнено/);
-  assert.match(own, /Вернуть в работу/);
+  assert.match(own, /1 из 2 задач/);
+  assert.match(own, /шаг плана/);
+  assert.match(own, /50%/);
+  assert.doesNotMatch(own, /type="range"/);
   assert.match(own, /жду ревью/);
   const noGoals = seeded();
   noGoals.setQueryData(keys.goals(), { goals: [] });
@@ -197,7 +224,12 @@ test('mentor and lead screens', () => {
   noQ.setQueryData(keys.inbox, { questions: [] });
   assert.match(html(<Inbox />, noQ), /Новых вопросов нет/);
   assert.match(html(<Approvals />), /Отгул 13.11/);
-  assert.match(html(<ApprovalRow a={{ kind: 'access', externalId: 'A', userId: 'u', userName: 'Анна', title: 'Доступ', details: { justification: 'для задачи' } }} />), /для задачи/);
+  const row = html(<ApprovalRow a={{ kind: 'access', externalId: 'A', userId: 'u', userName: 'Анна', title: 'Доступ', waitingHours: 30, details: { justification: 'для задачи', exception: 'Не положено стажёрам' } }} />);
+  assert.match(row, /для задачи/);
+  assert.match(row, /вне правил/);
+  assert.match(row, /Сделать исключение/);
+  assert.match(row, /ждёт 1 дн/);
+  assert.match(row, /Напомнить…/);
   const noA = seeded();
   noA.setQueryData(keys.approvals, { approvals: [] });
   assert.match(html(<Approvals />, noA), /Нечего согласовывать/);
@@ -205,12 +237,26 @@ test('mentor and lead screens', () => {
   const team = html(<Team />);
   assert.match(team, /1 без ответа/);
   assert.match(team, /1 из 2/);
+  assert.match(team, /нет целей/);
   assert.match(team, /не поставлены/);
+  assert.match(team, /просрочка/);
+  assert.match(team, /отстаёт от плана: просрочено 1/);
+  assert.match(team, /Наставник<\/dt><dd>Олег Кузнецов/);
+  assert.match(team, /1 ждут вас · 1 дн/);
+  assert.match(team, /Ждут вашего решения/);
+  assert.match(team, /Kubernetes, администрирование/);
+  assert.match(team, /Проверить SEARCH-101/);
+  assert.match(team, /новых сотрудников ждут назначения/);
   useUi.getState().go('team', { internId: 'u-anna' });
-  assert.match(html(<Team />), /Все стажёры/);
+  const det = html(<Team />);
+  assert.match(det, /Все стажёры/);
+  assert.match(det, /Заявки стажёра/);
+  assert.match(det, /1 не согласовано/);
+  assert.match(det, /ждёт вашего решения/);
+  assert.match(det, /согласовано/);
   useUi.getState().go('team');
   const noT = seeded();
-  noT.setQueryData(keys.team, { interns: [] });
+  noT.setQueryData(keys.dashboard, { interns: [], approvals: [], reminders: [], newcomers: 0 });
   assert.match(html(<Team />, noT), /нет стажёров/);
   const ins = html(<InsightsBody d={insights} />);
   assert.match(ins, /2,3 ч/);
@@ -328,6 +374,22 @@ test('quizzes: list, runner, review, editor', () => {
   assert.match(review(false), /Пока не сдан/);
   assert.match(review(false), /Правильный ответ: Потом/);
   assert.match(review(false), /Перечитать инструкцию/);
+  const hidden = html(
+    <QuizReview
+      result={{
+        attempt: { id: 'a', quizId: 'q', title: 'Отгулы', correct: 0, total: 1, percent: 0, passed: false, at: '' },
+        review: [{ text: 'Когда?', options: ['Сейчас', 'Потом'], chosen: 0, correct: -1, right: false, docId: 'process-day-off', docTitle: 'Как оформить отгул' }],
+        stepsDone: [],
+      }}
+      docIds={[]}
+      onRetry={() => undefined}
+      onExit={() => undefined}
+    />,
+  );
+  assert.doesNotMatch(hidden, /Правильный ответ/);
+  assert.match(hidden, /Перечитай:.*Как оформить отгул/);
+  assert.match(run, /Прервать тест/);
+  assert.match(run, /чат и инструкции закрыты/);
   const ed = html(<QuizEditor id="quiz_2" onDone={() => undefined} />);
   assert.match(ed, /Редактирование теста/);
   assert.match(ed, /value="Когда\?"/);
@@ -348,6 +410,7 @@ test('templates, programs, rights', () => {
   assert.match(p, /изменил\(а\) Олег/);
   assert.match(p, /тестов: 1/);
   assert.match(p, /Сделать копию/);
+  assert.match(p, /Добавить шаблон/);
   const qc = seeded();
   const tpls = (qc.getQueryData(keys.templates) as { templates: Parameters<typeof TemplateEditor>[0]['initial'][] }).templates;
   const te = html(<TemplateEditor initial={tpls[1]!} onDone={() => undefined} />);
@@ -422,6 +485,13 @@ test('nav by perms, today checkboxes, quiz button in chat', () => {
   const own = html(<PlanBody plan={{ ...plan, customized: true, periods: plan.periods.map((p) => ({ ...p, steps: p.steps.map((s) => ({ ...s, quiz: 'quiz-dayoff' })) })) }} />);
   assert.match(own, /Программа «Стажёр-разработчик», настроена индивидуально/);
   assert.match(own, /Пройти тест/);
+  const locked = seeded();
+  locked.setQueryData(keys.me, { user: anna, perms: [], activeQuiz: { quizId: 'quiz-dayoff', title: 'Отгулы', until: '2030-01-01T00:00:00Z' } });
+  useUi.getState().go('quizzes', { quizId: 'quiz-dayoff' });
+  const ls = html(<Shell user={anna} />, locked);
+  assert.match(ls, /Идёт тест «Отгулы»/);
+  assert.match(ls, /disabled=""[^>]*>Чат/);
+  assert.match(ls, /закрыто/);
   const views: View[] = ['quizzes', 'programs', 'rights'];
   for (const v of views) {
     useUi.getState().go(v);
@@ -439,17 +509,22 @@ test('registration and department transfer', () => {
   assert.match(reg, /Регистрация/);
   assert.match(reg, /ФИО/);
   assert.match(reg, /Рабочая почта/);
-  assert.match(reg, /Поиск объявлений — руководитель Мария Волкова/);
-  assert.match(reg, /Стажёр/);
-  assert.match(reg, /Сотрудник/);
+  assert.match(reg, /Пароль/);
+  assert.match(reg, /назначит руководитель/);
+  assert.doesNotMatch(reg, /<select/);
+  assert.doesNotMatch(reg, /Отдел и руководитель/);
   assert.match(html(<Login onDone={() => undefined} />), /Зарегистрироваться/);
-  assert.match(html(<Login onDone={() => undefined} initialMode="register" />), /Отдел и руководитель/);
+  assert.match(html(<Waiting user={{ ...anna, role: 'newcomer', email: 'a@example.com' }} />), /Ждём назначения/);
   const dep = html(<Department />);
   assert.match(dep, /Сотрудники отдела/);
   assert.match(dep, /oleg@example.com/);
   assert.match(dep, /зарегистрирован/);
   assert.match(dep, /Доставка — Сергей/);
   assert.match(dep, /Перевести/);
+  assert.match(dep, /Новые сотрудники/);
+  assert.match(dep, /Пётр Сидоров/);
+  assert.match(dep, /Принять в отдел/);
+  assert.match(dep, /petr@example.com/);
   assert.match(html(<Department />, makeQueryClient()), /Загружаю отдел/);
   assert.match(html(<Rights />, asLead()), /Сотрудники отдела/);
 });

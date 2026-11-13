@@ -484,3 +484,101 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .transfer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .transfer select { max-width: 260px; }
 @media (max-width: 760px) { .role-pick { grid-template-columns: 1fr; } }
+
+/* Кабинет руководителя: всё на одной странице */
+.cabinet { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: "kpis kpis" "interns side"; gap: 14px 20px; align-items: start; }
+.cab-kpis { grid-area: kpis; display: flex; flex-wrap: wrap; gap: 8px; }
+.cab-kpis .kpi { padding: 6px 12px; border-radius: 99px; background: var(--surface); font-size: 14px; }
+.cab-kpis .kpi .num { font-weight: 750; margin-right: 2px; }
+.cab-kpis .kpi.warn { background: color-mix(in srgb, var(--alert) 12%, transparent); color: var(--alert); }
+.cab-kpis .kpi .link { color: inherit; }
+.cab-interns { grid-area: interns; min-width: 0; }
+.cab-side { grid-area: side; display: grid; gap: 12px; align-content: start; }
+.cab-side .section-title { margin-top: 0; }
+.cab-side > section { display: grid; gap: 10px; }
+.compact-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.compact-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.compact-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cab-interns tbody tr { cursor: pointer; }
+.cab-interns tbody tr:hover { background: var(--surface); }
+.cab-interns .progress-line { width: 120px; }
+.cab-interns .avatar { width: 28px; height: 28px; font-size: 12px; }
+.row-late td:first-child { box-shadow: inset 3px 0 0 var(--alert); }
+.late-mark { margin-left: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--alert); }
+.row-alerts { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0 38px; }
+.row-alerts li, .alert-chip { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--alert) 12%, transparent); color: var(--alert); }
+.alert-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.person-wrap { position: relative; display: inline-block; }
+.summary-pop { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 300px; padding: 12px 14px; border-radius: var(--radius-m); background: var(--bg); border: 1px solid var(--line); box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.45); font-size: 13px; cursor: default; }
+.person-wrap:hover .summary-pop, .person-wrap:focus-within .summary-pop { display: grid; gap: 6px; }
+.summary-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+.summary-pop dt { color: var(--muted); }
+.summary-pop dd { margin: 0; }
+.approval.compact { max-width: none; padding: 10px 12px 12px; gap: 6px; transform: none; }
+.approval.compact h3 { font-size: 15px; }
+.approval.stale { box-shadow: var(--shadow-note), inset 3px 0 0 var(--alert); }
+.approval header { align-items: center; flex-wrap: wrap; }
+.exception-tag { margin-left: 0; background: var(--alert); color: #fff; }
+.exception-text { color: #8c1022; }
+.remind select { padding: 4px 6px; font-size: 13px; background: rgba(255, 255, 255, 0.72); color: var(--note-ink); border-color: rgba(0, 0, 0, 0.12); }
+.reminders { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 14px; }
+.rem-form { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.rem-form input { grid-column: 1 / -1; padding: 6px 8px; font-size: 14px; }
+.rem-form select { font-size: 13px; padding: 5px 6px; }
+.rem-list { display: grid; gap: 6px; }
+.rem-list li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 14px; }
+.rem-list li .muted { grid-column: 1; }
+.rem-list li .link { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.intern-requests { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 16px; display: grid; gap: 8px; }
+.intern-requests h3 { font-size: 16px; }
+.req-list { display: grid; gap: 4px; }
+.req { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius-s); }
+.req-submitted { background: var(--surface); }
+.req-mine { background: color-mix(in srgb, var(--alert) 10%, transparent); }
+.req-title { font-weight: 600; font-size: 14px; }
+.req .stamp { font-size: 12px; font-weight: 700; }
+.waiting .login-panel { margin: 0 auto; align-items: flex-start; }
+.avatar.role-newcomer { background: #fde7b0; }
+.avatar.big { width: 56px; height: 56px; font-size: 18px; }
+
+/* Цели из задач */
+.goal { display: block; }
+.goal-main { gap: 6px; }
+.goal-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.goal-main .progress-line { max-width: 420px; }
+.goal-tasks { display: grid; gap: 2px; }
+.goal-tasks li { display: flex; align-items: center; gap: 6px; }
+.goal-tasks li.done span { color: var(--muted); text-decoration: line-through; }
+.goal-tasks .checkbox input { accent-color: var(--go); }
+.goal-add-task { display: flex; gap: 6px; max-width: 420px; }
+.goal-add-task input { padding: 5px 8px; font-size: 14px; }
+.add-goal { display: grid; gap: 10px; }
+.add-goal-grid { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 8px; }
+.goal-task-pick { border: 1px dashed var(--line); border-radius: var(--radius-s); padding: 8px 10px; display: grid; gap: 6px; margin: 0; }
+.picked li { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.picked .tag { margin-left: 0; }
+
+/* Тест: чат и инструкции закрыты */
+.quiz-lock { font-size: 13px; padding: 3px 10px; border-radius: 99px; background: color-mix(in srgb, var(--buddy) 14%, transparent); color: var(--buddy); font-weight: 600; }
+.quiz-lock-note { padding: 8px 12px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--buddy) 9%, transparent); }
+.rail li button:disabled { opacity: 0.45; cursor: not-allowed; }
+.lock-mark { font-size: 11px; color: var(--muted); }
+.reread { color: var(--ink); }
+
+@media (max-width: 1100px) {
+  .cabinet { grid-template-columns: 1fr; grid-template-areas: "kpis" "side" "interns"; }
+}
+@media (max-width: 760px) {
+  .cab-interns table thead { display: none; }
+  .cab-interns td { display: block; border: 0; padding: 3px 0; }
+  .cab-interns tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row-late td:first-child { box-shadow: none; }
+  .row-alerts { margin-left: 0; }
+  .summary-pop { width: min(300px, 80vw); }
+  .add-goal-grid { grid-template-columns: 1fr; }
+  .department table thead { display: none; }
+  .department td { display: block; border: 0; padding: 4px 0; }
+  .department tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
+}
+
+.goal .progress, .cab-interns .progress { background: color-mix(in srgb, var(--ink) 10%, transparent); }

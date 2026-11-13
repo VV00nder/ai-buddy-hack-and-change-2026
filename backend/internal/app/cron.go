@@ -97,7 +97,7 @@ func (a *App) digest(ctx context.Context, u domain.User) bool {
 		return false
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Доброе утро, %s! Сегодня %d-й день стажировки.", strings.Fields(u.Name)[0], p.Day)
+	fmt.Fprintf(&b, "Доброе утро, %s! Сегодня %d-й день стажировки.", domain.FirstName(u.Name), p.Day)
 	for _, per := range p.Periods {
 		if per.ID == p.CurrentPeriod && p.Day-1 == per.FromDay {
 			fmt.Fprintf(&b, " Начинается этап «%s» — в нём %d шагов.", per.Name, per.Total)

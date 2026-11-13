@@ -100,14 +100,8 @@ function SignIn({ onDone, onRegister }: { onDone: (u: User) => void; onRegister:
   );
 }
 
-const roleOptions: { value: RegisterInput['role']; label: string; hint: string }[] = [
-  { value: 'intern', label: 'Стажёр', hint: 'План адаптации, тесты и наставник отдела' },
-  { value: 'engineer', label: 'Сотрудник', hint: 'Инструкции, заявки и чат без плана стажёра' },
-];
-
 export function Register({ onDone, onBack }: { onDone: (u: User) => void; onBack: () => void }) {
-  const teams = useQuery({ queryKey: ['auth-teams'], queryFn: api.authTeams });
-  const [form, setForm] = useState<RegisterInput>({ name: '', email: '', password: '', team: '', role: 'intern' });
+  const [form, setForm] = useState<RegisterInput>({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<RegisterInput>) => setForm({ ...form, ...patch });
@@ -124,12 +118,12 @@ export function Register({ onDone, onBack }: { onDone: (u: User) => void; onBack
       setBusy(false);
     }
   }
-  const team = teams.data?.teams.find((t) => t.id === form.team);
   return (
     <main className="login">
       <Intro />
       <section className="login-panel" aria-labelledby="reg-title">
         <h2 id="reg-title">Регистрация</h2>
+        <p className="muted small">Отдел, роль и наставника назначит руководитель — после регистрации он получит уведомление.</p>
         <form className="register" onSubmit={submit}>
           <label className="field">
             ФИО
@@ -144,29 +138,6 @@ export function Register({ onDone, onBack }: { onDone: (u: User) => void; onBack
             <input type="password" value={form.password} onChange={(e) => set({ password: e.target.value })} autoComplete="new-password" minLength={8} required />
             <span className="small">Не короче 8 символов, буквы и цифры</span>
           </label>
-          <label className="field">
-            Отдел и руководитель
-            <select value={form.team} onChange={(e) => set({ team: e.target.value })} required>
-              <option value="">Выберите отдел…</option>
-              {(teams.data?.teams ?? []).map((t) => (
-                <option key={t.id} value={t.id}>{t.name} — руководитель {t.leadName}</option>
-              ))}
-            </select>
-            {team && <span className="small">Вашим руководителем будет {team.leadName}{form.role === 'intern' ? ', наставника назначит отдел' : ''}.</span>}
-          </label>
-          {teams.isError && <p className="error">Не удалось загрузить отделы — проверьте связь и обновите страницу.</p>}
-          <fieldset className="role-pick">
-            <legend className="small muted">Роль</legend>
-            {roleOptions.map((r) => (
-              <label key={r.value} className={`role-option ${form.role === r.value ? 'on' : ''}`}>
-                <input type="radio" name="role" checked={form.role === r.value} onChange={() => set({ role: r.value })} />
-                <span>
-                  <strong>{r.label}</strong>
-                  <span className="muted small">{r.hint}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
           <button className="btn" disabled={busy}>{busy ? 'Создаю учётную запись…' : 'Зарегистрироваться'}</button>
           {error && <p className="error" role="alert">{error}</p>}
         </form>

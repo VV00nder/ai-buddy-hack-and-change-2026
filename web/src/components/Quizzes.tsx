@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, type QuizInput } from '../api/client';
-import type { QuizFull, QuizInfo, QuizQuestion, QuizResult } from '../api/schemas';
-import { keys, usePerms } from '../hooks/queries';
+import type { Me, QuizFull, QuizInfo, QuizLock, QuizQuestion, QuizResult } from '../api/schemas';
+import { keys, useMe, usePerms } from '../hooks/queries';
 import { useUi } from '../store/ui';
 import { TeamQuizResults } from './QuizResults';
 import { plural } from '../lib/format';
@@ -13,8 +13,13 @@ export function Quizzes({ role }: { role?: string }) {
   const perms = usePerms();
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const list = useQuery({ queryKey: keys.quizzes, queryFn: api.quizzes });
-  if (editing) return <QuizEditor id={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />;
-  if (quizId) return <QuizRunner id={quizId} onExit={() => go('quizzes')} />;
+  // начатый тест (например, после перезагрузки страницы) продолжается, пока его не сдадут или не прервут
+  const active = useMe().data?.activeQuiz?.quizId;
+  useEffect(() => {
+    if (active && quizId !== active) go('quizzes', { quizId: active });
+  }, [active, quizId, go]);
+  if (editing && !active) return <QuizEditor id={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />;
+  if (quizId) return <QuizRunner key={quizId} id={quizId} onExit={() => go('quizzes')} />;
   if (list.isPending) return <p className="muted">Загружаю тесты…</p>;
   if (list.isError) return <p className="error">{list.error.message}</p>;
   const qs = list.data.quizzes;
@@ -77,14 +82,36 @@ function QuizCard({ q, onOpen, onEdit }: { q: QuizInfo; onOpen: () => void; onEd
 
 export function QuizRunner({ id, onExit }: { id: string; onExit: () => void }) {
   const qc = useQueryClient();
-  const go = useUi((s) => s.go);
   const toast = useUi((s) => s.toast);
-  const q = useQuery({ queryKey: keys.quiz(id), queryFn: () => api.quiz(id) });
   const [answers, setAnswers] = useState<number[] | null>(null);
   const [result, setResult] = useState<QuizResult | null>(null);
+  // запуск теста закрывает чат и инструкции до сдачи (проверяется и на сервере)
+  const q = useQuery({
+    queryKey: ['quizRun', id],
+    queryFn: async () => {
+      const quiz = await api.startQuiz(id);
+      setActive({ quizId: id, title: quiz.title, until: new Date(Date.now() + 30 * 60_000).toISOString() });
+      return quiz;
+    },
+    staleTime: Infinity,
+    gcTime: 0,
+    enabled: !result,
+  });
+  function setActive(lock: QuizLock | null) {
+    qc.setQueryData<Me>(keys.me, (m) => (m ? { ...m, activeQuiz: lock } : m));
+  }
+  const cancel = useMutation({
+    mutationFn: api.cancelQuiz,
+    onSuccess: () => {
+      setActive(null);
+      onExit();
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
   const submit = useMutation({
     mutationFn: (a: number[]) => api.submitQuiz(id, a),
     onSuccess: (r) => {
+      setActive(null);
       setResult(r);
       // результат — вверху страницы: прокручиваем к нему
       if (typeof document !== 'undefined') document.querySelector('.content')?.scrollTo({ top: 0 });
@@ -99,15 +126,30 @@ export function QuizRunner({ id, onExit }: { id: string; onExit: () => void }) {
   const quiz = q.data;
   const a = answers ?? quiz.questions.map(() => -1);
   const answered = a.filter((x) => x >= 0).length;
-  if (result) return <QuizReview result={result} docIds={quiz.docIds} onRetry={() => { setResult(null); setAnswers(null); }} onExit={onExit} />;
+  if (result)
+    return (
+      <QuizReview
+        result={result}
+        docIds={quiz.docIds}
+        onRetry={() => {
+          setResult(null);
+          setAnswers(null);
+          void qc.invalidateQueries({ queryKey: ['quizRun', id] });
+        }}
+        onExit={onExit}
+      />
+    );
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     submit.mutate(a);
   }
   return (
     <form className="quiz-run" onSubmit={onSubmit}>
-      <button type="button" className="link back" onClick={onExit}>Все тесты</button>
-      <h2>{quiz.title}</h2>
+      <div className="row">
+        <h2>{quiz.title}</h2>
+        <button type="button" className="btn ghost small" disabled={cancel.isPending} onClick={() => cancel.mutate()}>Прервать тест</button>
+      </div>
+      <p className="small quiz-lock-note">Пока идёт тест, чат и инструкции закрыты. После сдачи по каждой ошибке будет ссылка на инструкцию, которую стоит перечитать.</p>
       {quiz.description && <p className="muted">{quiz.description}</p>}
       <div className="quiz-progress" aria-live="polite">
         <div className="progress" role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={quiz.questions.length} aria-label="Отвечено">
@@ -141,17 +183,6 @@ export function QuizRunner({ id, onExit }: { id: string; onExit: () => void }) {
         </button>
         {answered < quiz.questions.length && <span className="muted small">Ответь на все вопросы. Проходной балл — {quiz.passPercent}%.</span>}
       </div>
-      {quiz.docIds.length > 0 && (
-        <p className="small muted">
-          Тема:{' '}
-          {quiz.docIds.map((d, i) => (
-            <span key={d}>
-              {i > 0 && ', '}
-              <button type="button" className="link" onClick={() => go('knowledge', { docId: d })}>инструкция {i + 1}</button>
-            </span>
-          ))}
-        </p>
-      )}
     </form>
   );
 }
@@ -180,8 +211,14 @@ export function QuizReview({ result, docIds, onRetry, onExit }: { result: QuizRe
               {r.right ? 'Верно: ' : 'Твой ответ: '}
               {r.options[r.chosen] ?? 'нет ответа'}
             </p>
-            {!r.right && <p className="small right-answer">Правильный ответ: {r.options[r.correct]}</p>}
+            {!r.right && r.correct >= 0 && <p className="small right-answer">Правильный ответ: {r.options[r.correct]}</p>}
             {r.explain && <p className="small muted">{r.explain}</p>}
+            {!r.right && r.docId && (
+              <p className="small reread">
+                Перечитай:{' '}
+                <button className="link" onClick={() => go('knowledge', { docId: r.docId! })}>{r.docTitle || 'инструкция по теме'}</button>
+              </p>
+            )}
           </li>
         ))}
       </ol>

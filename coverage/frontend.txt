@@ -1,27 +1,27 @@
-✔ client validates responses and sends CSRF header (38.058288ms)
-✔ client maps errors (3.987702ms)
-✔ client endpoints (8.140146ms)
-✔ sse subscription (0.580615ms)
-✔ chat renders history, sources, action card and pending trace (54.870543ms)
-✔ bubble variants (2.644786ms)
-✔ action card states (9.285609ms)
-✔ plan and today panel (18.897169ms)
-✔ mentor and lead screens (20.00497ms)
-✔ requests, knowledge, login, shell and app (55.893324ms)
-✔ knowledge: folders, search, editor (19.566744ms)
-✔ quizzes: list, runner, review, editor (26.846671ms)
-✔ templates, programs, rights (35.708531ms)
-✔ nav by perms, today checkboxes, quiz button in chat (16.900431ms)
-✔ registration and department transfer (9.965942ms)
-✔ format helpers (16.127222ms)
-✔ markdown parser (9.336808ms)
-✔ service worker registers only in production (2.0511ms)
-✔ shortcut view from query string (0.165361ms)
-✔ install prompt hook renders without target (6.959852ms)
-✔ manifest is valid (0.699466ms)
-✔ upsert helpers (1.996932ms)
-✔ applyUpdate updates query cache (6.266803ms)
-✔ ui store (0.547731ms)
+✔ client validates responses and sends CSRF header (24.360691ms)
+✔ client maps errors (2.875483ms)
+✔ client endpoints (8.280819ms)
+✔ sse subscription (0.370995ms)
+✔ chat renders history, sources, action card and pending trace (49.787019ms)
+✔ bubble variants (3.021129ms)
+✔ action card states (8.072552ms)
+✔ plan and today panel (17.964955ms)
+✔ mentor and lead screens (31.227991ms)
+✔ requests, knowledge, login, shell and app (63.713755ms)
+✔ knowledge: folders, search, editor (20.973677ms)
+✔ quizzes: list, runner, review, editor (28.921153ms)
+✔ templates, programs, rights (34.020163ms)
+✔ nav by perms, today checkboxes, quiz button in chat (23.569122ms)
+✔ registration and department transfer (14.926795ms)
+✔ format helpers (16.965264ms)
+✔ markdown parser (8.466286ms)
+✔ service worker registers only in production (2.140923ms)
+✔ shortcut view from query string (0.186972ms)
+✔ install prompt hook renders without target (10.984203ms)
+✔ manifest is valid (0.377813ms)
+✔ upsert helpers (1.761219ms)
+✔ applyUpdate updates query cache (4.852047ms)
+✔ ui store (0.449853ms)
 ℹ tests 24
 ℹ suites 0
 ℹ pass 24
@@ -29,44 +29,45 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 7334.846849
+ℹ duration_ms 7633.911937
 ℹ start of coverage report
-ℹ -------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 ℹ file              | line % | branch % | funcs % | uncovered lines
-ℹ -------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 ℹ src               |        |          |         | 
 ℹ  api              |        |          |         | 
-ℹ   client.ts       |  95.83 |    95.65 |   53.33 | 63 82 90 94 98 103
-ℹ   schemas.ts      | 100.00 |    85.00 |   68.42 | 
+ℹ   client.ts       |  97.56 |    96.49 |   61.43 | 63 97 100 104
+ℹ   schemas.ts      |  99.76 |    88.00 |   72.00 | 184
 ℹ   sse.ts          | 100.00 |   100.00 |   85.71 | 
-ℹ  App.tsx          |  55.32 |    69.23 |   71.43 | 22-24 29-32 34-47
+ℹ  App.tsx          |  55.10 |    73.33 |   71.43 | 23-25 30-33 35-49
 ℹ  components       |        |          |         | 
 ℹ   ActionCard.tsx  |  97.17 |    96.15 |   61.54 | 76 105-106
-ℹ   Approvals.tsx   |  77.97 |    81.82 |   72.73 | 11-13 16 46-54
-ℹ   Chat.tsx        |  92.49 |    94.55 |   76.00 | 64-65 67 69-70 83-88 148-149
-ℹ   Goals.tsx       |  90.00 |    88.89 |   44.00 | 57 75-76 80 82 108-113 116
+ℹ   Approvals.tsx   |  81.44 |    88.89 |   61.11 | 12-14 16 44-46 51-58 63-64 66
+ℹ   Chat.tsx        |  91.95 |    94.55 |   76.00 | 65-66 68 70-71 84-89 131 149-150
+ℹ   Goals.tsx       |  47.03 |    76.92 |   43.48 | 26-27 58-63 103 106 110 113-126 129-219
 ℹ   Inbox.tsx       |  86.25 |    66.67 |   86.67 | 17-18 20 66-67 74 76-80
 ℹ   Insights.tsx    |  94.34 |    85.71 |  100.00 | 10-12
 ℹ   Knowledge.tsx   |  84.30 |    85.37 |   51.39 | 82-83 111-134 162-163 188-193 196-197 233 236 267-271 316-323 328-332 334
-ℹ   Login.tsx       |  83.80 |    82.61 |   62.50 | 95-102 112-121 128 148 171-179
-ℹ   PlanView.tsx    |  98.32 |    96.23 |   61.54 | 16 80
-ℹ   Programs.tsx    |  83.67 |    75.56 |   36.21 | 15-23 27 93-96 101-106 109 114 124 130 142-143 145-147 150-151 157 196 241-245 250-253 258-263
-ℹ   QuizResults.tsx |  99.28 |    94.34 |   82.35 | 90
-ℹ   Quizzes.tsx     |  92.09 |    85.71 |   51.56 | 14 110-113 121-123 128 162 167 203-205 216-217 263-267 271 301-302 310
+ℹ   Login.tsx       |  82.00 |    66.67 |   63.16 | 58-59 95-102 117-126 135-137 147-150
+ℹ   PlanView.tsx    |  98.32 |    96.30 |   64.29 | 16 80
+ℹ   Programs.tsx    |  81.05 |    75.56 |   35.00 | 15-23 30-33 37-39 85 100-103 105-113 156 158-160 162-164 169-170 209-210 254-258 260-261 263-266 271-275 279
+ℹ   QuizResults.tsx |  95.68 |    92.73 |   82.35 | 36-41
+ℹ   Quizzes.tsx     |  90.37 |    85.45 |   46.27 | 19-20 108 118 121 130-146 151 154 250 307-308 312 327 349-353
 ℹ   Requests.tsx    |  96.00 |    80.00 |  100.00 | 13
-ℹ   Rights.tsx      |  85.47 |    85.71 |   80.95 | 34-39 49 72-85 121 160-162
-ℹ   Shell.tsx       |  88.61 |    92.11 |   61.11 | 100-106 108 136-142 169 175-180 184
-ℹ   Team.tsx        |  88.10 |    71.43 |   57.14 | 27-28 61 78-84
+ℹ   Rights.tsx      |  79.62 |    86.84 |   78.13 | 34-39 49 73-85 101 116 125-146 214-215 239-245
+ℹ   Shell.tsx       |  85.14 |    93.62 |   60.00 | 95-98 101-108 110-113 158-163 190-191 196-200 204-207
+ℹ   Team.tsx        |  92.73 |    77.61 |   85.71 | 32-33 35-37 165-167 172-173 219 233-237 257-261
 ℹ   TodayPanel.tsx  |  97.59 |    88.24 |   50.00 | 72-73
+ℹ   Waiting.tsx     | 100.00 |   100.00 |   75.00 | 
 ℹ  hooks            |        |          |         | 
-ℹ   queries.ts      |  77.93 |    82.86 |   72.73 | 69-72 75 88 97 110-114 118-123 129-132 141-158 162 171-172 175 179-183
+ℹ   queries.ts      |  77.06 |    83.10 |   73.21 | 71-76 78 92 101 114-118 121-123 132-134 137-138 143-160 164-165 170-177 180-181 185
 ℹ  lib              |        |          |         | 
 ℹ   format.ts       | 100.00 |   100.00 |  100.00 | 
 ℹ   markdown.tsx    | 100.00 |   100.00 |  100.00 | 
 ℹ  pwa.ts           |  79.37 |    87.50 |   66.67 | 7 24-32 34-36
 ℹ  store            |        |          |         | 
 ℹ   ui.ts           | 100.00 |   100.00 |  100.00 | 
-ℹ -------------------------------------------------------------------------------------------------------------------------------------------------
-ℹ all files         |  89.93 |    88.57 |   62.12 | 
-ℹ -------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ all files         |  87.08 |    88.18 |   63.91 | 
+ℹ ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 ℹ end of coverage report

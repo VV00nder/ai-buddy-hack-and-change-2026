@@ -22,11 +22,12 @@
 | Инструкции: папки, поиск, редактирование | [010](010-kb-editing/spec.md) | `knowledge`, `app/kbadmin.go`, `web/src/components/Knowledge.tsx` | `learning_test.go: TestRightsAndKBEditing` |
 | Права от руководителя | [011](011-delegation/spec.md) | `corp/delegation.go`, `app/rights.go`, `web/src/components/Rights.tsx` | `corp_test.go: TestDeputies`, `learning_test.go: TestApprovalDelegation` |
 | Регистрация и перевод между отделами | [012](012-accounts/spec.md) | `corp/registry.go`, `app/accounts.go`, `Login.tsx`, `Rights.tsx` | `corp_test.go: TestRegisterAndTransfer`, `accounts_test.go` |
+| Кабинет руководителя и напоминания | [013](013-lead-cabinet/spec.md) | `app/dashboard.go`, `web/src/components/Team.tsx`, `Approvals.tsx` | `dashboard_test.go: TestLeadDashboard` |
 | Отметка шагов из чата | [002](002-onboarding-plan/spec.md) | `agent/learning.go`, `TodayPanel.tsx` | `learning_test.go: TestChatMarksStepsAndOffersQuiz` |
 | Поведение агента | [agent](agent/agent-spec.md) | `backend/internal/agent` | `agent_test.go` (офлайн и LLM-режим) |
 
 Сквозной сценарий всех фич — `e2e/demo.mjs` (он же записывает видео).
 
-Спецификации 008–011 и отметка шагов из чата добавлены 13.11.2026 по итогам прогона прототипа командой.
+Спецификации 008–011 и отметка шагов из чата добавлены 13.11.2026 по итогам прогона прототипа командой; 013 и изменения 004, 006, 008, 012 (исключения по доступам, цели из задач, блокировка на время теста, регистрация без отдела) — по итогам второго прогона в тот же день.
 
 Спецификации 004, 006 и 007 уточнены по ответам экспертов Авито в чате трека (10.11.2026): состав заявки на доступ и согласующие по типу ресурса, цели стажировки, имитация ИИ-крона.

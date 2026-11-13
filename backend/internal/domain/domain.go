@@ -1,7 +1,10 @@
 // Package domain содержит общие типы AI-buddy.
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Role — роль пользователя в процессе адаптации.
 type Role string
@@ -221,4 +224,17 @@ type Event struct {
 	Type   string         `json:"type"`
 	Props  map[string]any `json:"props,omitempty"`
 	At     time.Time      `json:"at"`
+}
+
+// FirstName — имя для обращения. В ФИО из трёх слов («Сидоров Пётр Андреевич»)
+// имя — второе слово, в «Анна Смирнова» — первое.
+func FirstName(full string) string {
+	f := strings.Fields(full)
+	switch {
+	case len(f) >= 3:
+		return f[1]
+	case len(f) > 0:
+		return f[0]
+	}
+	return "коллега"
 }

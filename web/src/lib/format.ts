@@ -31,6 +31,7 @@ export const roleName: Record<Role, string> = {
   lead: 'Руководитель',
   hrbp: 'HR BP',
   engineer: 'Инженер',
+  newcomer: 'Ожидает назначения',
 };
 
 export const levelName: Record<string, string> = { read: 'чтение', edit: 'редактирование', admin: 'администрирование' };
@@ -83,4 +84,35 @@ export function initials(name: string): string {
     .slice(0, 2)
     .map((p) => p[0]!.toUpperCase())
     .join('');
+}
+
+/** waited — сколько ждёт заявка: «меньше часа», «5 ч», «2 дн». */
+export function waited(hours: number): string {
+  if (hours < 1) return 'меньше часа';
+  if (hours < 24) return `${hours} ч`;
+  return `${Math.floor(hours / 24)} дн`;
+}
+
+/** remindAt — момент напоминания: через N часов или завтра в 9:00. */
+export function remindAt(choice: string, now: Date = new Date()): { inHours?: number; at?: string } {
+  if (choice === 'tomorrow') {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return { at: d.toISOString() };
+  }
+  return { inHours: Number(choice) };
+}
+
+export const remindChoices: { value: string; label: string }[] = [
+  { value: '1', label: 'через 1 ч' },
+  { value: '3', label: 'через 3 ч' },
+  { value: 'tomorrow', label: 'завтра в 9:00' },
+  { value: '72', label: 'через 3 дня' },
+];
+
+/** firstName — имя для обращения: в ФИО из трёх слов это второе слово. */
+export function firstName(full: string): string {
+  const f = full.trim().split(/\s+/).filter(Boolean);
+  return f.length >= 3 ? f[1]! : (f[0] ?? 'коллега');
 }

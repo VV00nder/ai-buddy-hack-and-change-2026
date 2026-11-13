@@ -276,6 +276,11 @@ func (a *App) SeedGoals(ctx context.Context, seeds map[string][]GoalInput, by ma
 		for _, in := range list {
 			var tasks []domain.GoalTask
 			for _, t := range in.Tasks {
+				if t.Title == "" {
+					if st, ok := a.tpl.Step(t.StepID); ok {
+						t.Title = st.Title
+					}
+				}
 				tasks = append(tasks, domain.GoalTask{ID: newID("gt"), Title: t.Title, StepID: t.StepID})
 			}
 			g := domain.Goal{ID: newID("g"), InternID: intern, Title: in.Title, Metric: in.Metric, Due: in.Due,

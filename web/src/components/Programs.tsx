@@ -24,12 +24,24 @@ export function Programs() {
   if (list.isPending) return <p className="muted">Загружаю шаблоны…</p>;
   if (list.isError) return <p className="error">{list.error.message}</p>;
   const copy = (t: Template): Template => ({ ...t, id: '', builtin: false, name: `${t.name} (копия)`, steps: t.steps.map((s) => ({ ...s })) });
+  // новый пустой шаблон берёт этапы (недели) у первого шаблона — их можно не настраивать
+  const blank = (): Template => ({
+    id: '',
+    name: '',
+    description: '',
+    builtin: false,
+    periods: list.data.templates[0]?.periods ?? [],
+    steps: [],
+  });
   return (
     <section className="programs">
-      <p className="muted">
-        Шаблон — набор этапов и шагов адаптации. Назначьте шаблон стажёру во вкладке «Стажёры» и при необходимости настройте программу под него.
-        Встроенные шаблоны можно скопировать и изменить.
-      </p>
+      <header className="row">
+        <p className="muted">
+          Шаблон — набор этапов и шагов адаптации. Назначьте шаблон стажёру во вкладке «Стажёры» и при необходимости настройте программу под него.
+          Встроенные шаблоны можно скопировать и изменить.
+        </p>
+        <button className="btn small" onClick={() => setEdit(blank())}>Добавить шаблон</button>
+      </header>
       <ul className="tpl-grid">
         {list.data.templates.map((t) => (
           <li key={t.id} className="tpl-card">
@@ -77,7 +89,7 @@ export function TemplateEditor({ initial, onDone }: { initial: Template; onDone:
       <div className="editor-grid">
         <label className="field">
           Название
-          <input value={name} onChange={(e) => setName(e.target.value)} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Стажёр-аналитик" required />
         </label>
         <label className="field">
           Описание

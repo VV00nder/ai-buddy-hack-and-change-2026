@@ -88,9 +88,32 @@ export function Department() {
   const q = useQuery({ queryKey: keys.department, queryFn: api.department });
   if (q.isPending) return <p className="muted">Загружаю отдел…</p>;
   if (q.isError) return <p className="error">{q.error.message}</p>;
-  const { members, teams } = q.data;
+  const { members, teams, newcomers, mentors } = q.data;
   return (
     <section className="department" aria-label="Сотрудники отдела">
+      <h3 className="section-title">Новые сотрудники</h3>
+      {newcomers.length === 0 ? (
+        <p className="muted small">Нет новых регистраций. Когда сотрудник зарегистрируется (ФИО, почта, пароль), он появится здесь — назначьте ему роль и наставника.</p>
+      ) : (
+        <>
+          <p className="muted small">Сотрудник зарегистрировался и ждёт назначения. После принятия в отдел у стажёра откроется план адаптации с сегодняшнего дня.</p>
+          <table className="compact-table">
+            <thead>
+              <tr>
+                <th scope="col">Сотрудник</th>
+                <th scope="col">Роль</th>
+                <th scope="col">Наставник</th>
+                <th scope="col"><span className="sr-only">Действие</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {newcomers.map((u) => (
+                <NewcomerRow key={u.id} u={u} mentors={mentors} />
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
       <h3 className="section-title">Сотрудники отдела</h3>
       <p className="muted small">
         Перевод в другой отдел: руководителем сотрудника станет руководитель нового отдела, стажёр получит наставника нового отдела. Заявки,
@@ -166,6 +189,71 @@ function MemberRow({ u, teams }: { u: User; teams: { id: string; name: string; l
             Перевести
           </button>
         </div>
+      </td>
+    </tr>
+  );
+}
+
+const assignRoles: { value: string; label: string }[] = [
+  { value: 'intern', label: 'Стажёр' },
+  { value: 'engineer', label: 'Сотрудник' },
+  { value: 'mentor', label: 'Наставник' },
+];
+
+/** Руководитель принимает зарегистрировавшегося сотрудника в отдел и назначает роль. */
+export function NewcomerRow({ u, mentors }: { u: User; mentors: User[] }) {
+  const qc = useQueryClient();
+  const toast = useUi((s) => s.toast);
+  const [role, setRole] = useState('intern');
+  const [mentor, setMentor] = useState(mentors[0]?.id ?? '');
+  const m = useMutation({
+    mutationFn: () => api.assign(u.id, role, role === 'intern' ? mentor : ''),
+    onSuccess: (d) => {
+      qc.setQueryData(keys.department, d);
+      void qc.invalidateQueries({ queryKey: keys.team });
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+      void qc.invalidateQueries({ queryKey: keys.rights });
+      toast(`${u.name} принят(а) в отдел — сотрудник получил уведомление`);
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
+  return (
+    <tr>
+      <td>
+        <span className="person">
+          <span className="avatar role-newcomer" aria-hidden="true">{initials(u.name)}</span>
+          <span>
+            {u.name}
+            <br />
+            <span className="muted small">{u.email}</span>
+          </span>
+        </span>
+      </td>
+      <td>
+        <label className="sr-only" htmlFor={`role-${u.id}`}>Роль для {u.name}</label>
+        <select id={`role-${u.id}`} value={role} onChange={(e) => setRole(e.target.value)}>
+          {assignRoles.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+      </td>
+      <td>
+        {role === 'intern' ? (
+          <>
+            <label className="sr-only" htmlFor={`mentor-${u.id}`}>Наставник для {u.name}</label>
+            <select id={`mentor-${u.id}`} value={mentor} onChange={(e) => setMentor(e.target.value)}>
+              {mentors.length === 0 && <option value="">Наставник отдела</option>}
+              {mentors.map((x) => (
+                <option key={x.id} value={x.id}>{x.name}</option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <span className="muted small">не нужен</span>
+        )}
+      </td>
+      <td>
+        <button className="btn small" disabled={m.isPending} onClick={() => m.mutate()}>Принять в отдел</button>
       </td>
     </tr>
   );

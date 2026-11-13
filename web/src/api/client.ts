@@ -62,10 +62,18 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
       call('PATCH', `/api/plan/steps/${encodeURIComponent(stepId)}`, S.Plan, { status, internId, note }),
     goals: (internId?: string) =>
       call('GET', `/api/goals${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ goals: S.Goal.array() })),
-    addGoal: (internId: string, title: string, metric: string, due: string) =>
-      call('POST', '/api/goals', obj({ goal: S.Goal }), { internId, title, metric, due }),
-    updateGoal: (id: string, patch: { status?: S.Goal['status']; progress?: number; note?: string }) =>
-      call('PATCH', `/api/goals/${encodeURIComponent(id)}`, obj({ goal: S.Goal }), patch),
+    addGoal: (internId: string, g: GoalInput) => call('POST', '/api/goals', obj({ goal: S.Goal }), { internId, ...g }),
+    updateGoal: (id: string, patch: { note?: string }) => call('PATCH', `/api/goals/${encodeURIComponent(id)}`, obj({ goal: S.Goal }), patch),
+    setGoalTask: (goalId: string, taskId: string, done: boolean) =>
+      call('PATCH', `/api/goals/${encodeURIComponent(goalId)}/tasks/${encodeURIComponent(taskId)}`, obj({ goal: S.Goal }), { done }),
+    addGoalTask: (goalId: string, t: TaskInput) => call('POST', `/api/goals/${encodeURIComponent(goalId)}/tasks`, obj({ goal: S.Goal }), t),
+    dashboard: () => call('GET', '/api/dashboard', S.Dashboard),
+    internRequests: (id: string) => call('GET', `/api/team/${encodeURIComponent(id)}/requests`, obj({ requests: S.InternRequest.array() })),
+    reminders: () => call('GET', '/api/reminders', obj({ reminders: S.Reminder.array() })),
+    addReminder: (r: { text: string; link?: string; inHours?: number; at?: string }) => call('POST', '/api/reminders', S.Reminder, r),
+    deleteReminder: (id: string) => call('DELETE', `/api/reminders/${encodeURIComponent(id)}`, ok),
+    assign: (userId: string, role: string, mentorId: string) =>
+      call('POST', `/api/department/${encodeURIComponent(userId)}/assign`, S.Department, { role, mentorId }),
     team: () => call('GET', '/api/team', obj({ interns: S.InternSummary.array() })),
     internPlan: (id: string) => call('GET', `/api/team/${encodeURIComponent(id)}/plan`, obj({ plan: S.Plan, intern: S.User })),
     approvals: () => call('GET', '/api/approvals', obj({ approvals: S.Approval.array() })),
@@ -86,6 +94,8 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     deleteFolder: (path: string) => call('DELETE', `/api/kb/folders?path=${encodeURIComponent(path)}`, obj({ folders: z.array(z.string()) })),
     quizzes: () => call('GET', '/api/quizzes', obj({ quizzes: S.QuizInfo.array() })),
     quiz: (id: string) => call('GET', `/api/quizzes/${encodeURIComponent(id)}`, S.QuizPublic),
+    startQuiz: (id: string) => call('POST', `/api/quizzes/${encodeURIComponent(id)}/start`, S.QuizPublic),
+    cancelQuiz: () => call('DELETE', '/api/quizzes/active', ok),
     quizFull: (id: string) => call('GET', `/api/quizzes/${encodeURIComponent(id)}/edit`, S.QuizFull),
     saveQuiz: (id: string | null, q: QuizInput) =>
       id ? call('PUT', `/api/quizzes/${encodeURIComponent(id)}`, S.QuizFull, q) : call('POST', '/api/quizzes', S.QuizFull, q),
@@ -112,8 +122,18 @@ export interface RegisterInput {
   name: string;
   email: string;
   password: string;
-  team: string;
-  role: 'intern' | 'engineer';
+}
+
+export interface TaskInput {
+  title: string;
+  stepId?: string;
+}
+
+export interface GoalInput {
+  title: string;
+  metric: string;
+  due: string;
+  tasks: TaskInput[];
 }
 
 export interface DocInput {

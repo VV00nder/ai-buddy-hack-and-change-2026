@@ -162,7 +162,8 @@ func (a *App) InternRequests(ctx context.Context, s kv.Session, internID string)
 	}
 	out := []InternRequest{}
 	for _, ac := range acts {
-		if ac.Status == domain.ActionProposed || ac.Status == domain.ActionCancelled {
+		// вопросы наставнику — не согласования, они в разделе вопросов
+		if ac.Status == domain.ActionProposed || ac.Status == domain.ActionCancelled || ac.Kind == domain.ActionMentorQuestion {
 			continue
 		}
 		out = append(out, InternRequest{ID: ac.ID, Kind: ac.Kind, Title: ac.Title, Status: ac.Status, ExternalID: ac.ExternalID,

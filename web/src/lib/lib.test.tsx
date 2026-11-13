@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { dayMonth, initials, plural, relative, stampText, time } from './format';
+import { dayMonth, initials, plural, relative, remindAt, stampText, time, waited, firstName } from './format';
 import { inline, Markdown, parseBlocks } from './markdown';
 
 test('format helpers', () => {
   assert.equal(dayMonth('2026-11-13'), '13 ноября');
+  assert.equal(firstName('Сидоров Пётр Андреевич'), 'Пётр');
+  assert.equal(firstName('Анна Смирнова'), 'Анна');
+  assert.equal(firstName(''), 'коллега');
+  assert.equal(waited(0), 'меньше часа');
+  assert.equal(waited(5), '5 ч');
+  assert.equal(waited(50), '2 дн');
+  assert.deepEqual(remindAt('3'), { inHours: 3 });
+  const t = remindAt('tomorrow', new Date(2026, 10, 13, 18, 0));
+  assert.equal(new Date(t.at!).getDate(), 14);
+  assert.equal(new Date(t.at!).getHours(), 9);
   assert.equal(dayMonth('bad'), 'bad');
   assert.equal(initials('Анна Смирнова'), 'АС');
   assert.equal(plural(1, 'день', 'дня', 'дней'), 'день');

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { Action, Message, User } from '../api/schemas';
 import { byCreated, useChat, useConfig, useFeedback, useSend } from '../hooks/queries';
-import { time } from '../lib/format';
+import { firstName, time } from '../lib/format';
 import { Markdown } from '../lib/markdown';
 import { useUi } from '../store/ui';
 import { ActionCard } from './ActionCard';
@@ -12,6 +12,7 @@ const starters: Record<User['role'], string[]> = {
   lead: ['Кто сейчас у нас стажируется?', 'Что такое Zero Bug Policy?', 'Как стажёру получить доступ к Redash?'],
   hrbp: ['Кто сейчас стажируется?', 'Как проходит экваторная встреча?'],
   engineer: ['Какие доступы нужны стажёру?'],
+  newcomer: [],
 };
 
 export function Chat({ user }: { user: User }) {
@@ -53,7 +54,7 @@ export function Chat({ user }: { user: User }) {
         {chat.isError && <p className="error center">Не удалось загрузить историю. Обнови страницу.</p>}
         {chat.isSuccess && messages.length === 0 && (
           <div className="empty">
-            <h2>Привет, {user.name.split(' ')[0]}! Спроси о команде, процессах или инструментах.</h2>
+            <h2>Привет, {firstName(user.name)}! Спроси о команде, процессах или инструментах.</h2>
             <p className="muted">Я отвечаю по инструкциям команды и показываю источник. Заявки на отгул и доступы готовлю сам — ты только проверяешь и отправляешь.</p>
           </div>
         )}

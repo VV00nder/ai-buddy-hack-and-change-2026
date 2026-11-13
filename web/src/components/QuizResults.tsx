@@ -31,7 +31,8 @@ export function AttemptAnswers({ a }: { a: AttemptView }) {
           <p className="small">
             <span className={r.right ? 'pass-text' : 'overdue-text'}>{r.right ? 'Верно' : 'Ошибка'}</span>: {r.options[r.chosen] ?? 'нет ответа'}
           </p>
-          {!r.right && <p className="small muted">Правильный ответ: {r.options[r.correct]}</p>}
+          {!r.right && r.correct >= 0 && <p className="small muted">Правильный ответ: {r.options[r.correct]}</p>}
+          {!r.right && r.docTitle && <p className="small muted">Перечитать: {r.docTitle}</p>}
         </li>
       ))}
     </ol>

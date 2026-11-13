@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { User } from '../api/schemas';
-import { useLiveUpdates, useNotifications, keys, usePerms } from '../hooks/queries';
+import { useLiveUpdates, useNotifications, keys, usePerms, useMe } from '../hooks/queries';
 import { initials, relative, roleName } from '../lib/format';
 import { useUi, type View } from '../store/ui';
 import { useInstallPrompt, viewFromSearch } from '../pwa';
@@ -54,6 +54,7 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
   ],
+  newcomer: [],
   hrbp: [
     { view: 'team', label: 'Стажёры' },
     { view: 'insights', label: 'Польза' },
@@ -76,7 +77,14 @@ export function Shell({ user }: { user: User }) {
   const perms = usePerms();
   const nav = navFor(user.role, perms);
   const qc = useQueryClient();
+  // во время теста чат и инструкции закрыты — чтобы не подсматривать материал
+  const activeQuiz = useMe().data?.activeQuiz ?? null;
+  const locked = (v: View) => !!activeQuiz && (v === 'chat' || v === 'knowledge');
   useLiveUpdates(true);
+  useEffect(() => {
+    if (activeQuiz && locked(view)) go('quizzes', { quizId: activeQuiz.quizId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuiz?.quizId, view]);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {
@@ -104,8 +112,15 @@ export function Shell({ user }: { user: User }) {
         <ul>
           {nav.map((n) => (
             <li key={n.view}>
-              <button className={view === n.view ? 'active' : ''} aria-current={view === n.view ? 'page' : undefined} onClick={() => go(n.view)}>
+              <button
+                className={view === n.view ? 'active' : ''}
+                aria-current={view === n.view ? 'page' : undefined}
+                disabled={locked(n.view)}
+                title={locked(n.view) ? 'Недоступно, пока идёт тест' : undefined}
+                onClick={() => go(n.view)}
+              >
                 {n.label}
+                {locked(n.view) && <span className="lock-mark" aria-label="закрыто на время теста"> ·&nbsp;закрыто</span>}
               </button>
             </li>
           ))}
@@ -122,15 +137,20 @@ export function Shell({ user }: { user: User }) {
       <div className="main">
         <header className="topbar">
           <h1 className="view-title">{nav.find((n) => n.view === view)?.label ?? 'План стажёра'}</h1>
+          {activeQuiz && (
+            <span className="quiz-lock" role="status">
+              Идёт тест «{activeQuiz.title}»: чат и инструкции закрыты до сдачи
+            </span>
+          )}
           {!online && <span className="offline" role="status">Нет живого соединения — обновляю данные опросом</span>}
           <InstallButton />
           <Bell />
         </header>
         <div className="content">
-          {view === 'chat' && <Chat user={user} />}
+          {view === 'chat' && !activeQuiz && <Chat user={user} />}
           {view === 'plan' && <PlanView />}
           {view === 'requests' && <Requests />}
-          {view === 'knowledge' && <Knowledge />}
+          {view === 'knowledge' && !activeQuiz && <Knowledge />}
           {view === 'quizzes' && <Quizzes role={user.role} />}
           {view === 'programs' && <Programs />}
           {view === 'rights' && <Rights />}
@@ -140,7 +160,7 @@ export function Shell({ user }: { user: User }) {
           {view === 'insights' && <Insights />}
         </div>
       </div>
-      {user.role === 'intern' && view === 'chat' && <TodayPanel />}
+      {user.role === 'intern' && view === 'chat' && !activeQuiz && <TodayPanel />}
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.tone}`} onClick={() => dismiss(t.id)}>

@@ -165,8 +165,11 @@ await page.getByRole('button', { name: 'Мой план', exact: true }).click()
 await pause(800);
 check('шаг плана про Stash закрыт автоматически', (await page.locator('.step-done', { hasText: 'Stash' }).count()) === 1);
 check('цели стажировки в плане', (await page.locator('.goal').count()) === 3);
-await caption('Цели стажировки с критериями успеха — трекер прогресса из чек-листа. Руководитель видит прогресс без отчётов', 3000);
-await page.locator('.goal').first().getByRole('button', { name: 'Отметить выполненной' }).click();
+check('прогресс цели посчитан по закрытому шагу плана', (await page.locator('.goal').first().locator('.pct').innerText()) === '20%');
+await caption('Цель состоит из задач: процент считается сам. Задача-шаг «доступ к Stash» закрылась вместе с шагом плана', 3000);
+await page.locator('.goal').first().locator('.goal-tasks input:not([disabled])').first().click();
+await page.locator('.goal').first().locator('.pct', { hasText: '40%' }).waitFor();
+check('задача цели закрыта — прогресс пересчитан', true);
 await pause(900);
 await page.locator('.step-done', { hasText: 'Stash' }).scrollIntoViewIfNeeded();
 await caption('Шаг плана «Получи доступ к Stash» закрылся автоматически после выдачи доступа', 2600);
@@ -187,6 +190,8 @@ await caption('После темы — короткий тест. AI-buddy по�
 await ask('Проверь мои знания по SSH-ключам');
 await lastAssistant().getByRole('button', { name: 'Пройти тест' }).click();
 await page.locator('.quiz-run legend').first().waitFor();
+check('во время теста чат и инструкции закрыты', await page.locator('.rail button', { hasText: 'Инструкции' }).isDisabled());
+await caption('Пока идёт тест, чат и инструкции закрыты — подсмотреть материал нельзя', 2200);
 const answersWeek1 = [1, 0, 1, 2, 0];
 for (const [i, j] of answersWeek1.entries()) {
   await page.locator('.questions > li').nth(i).locator('.option').nth(j).click();
@@ -220,7 +225,12 @@ check('инструкция в папке «Процессы / Релизы»', 
 await pause(1200);
 await caption('Шаблоны обучения: встроенные можно скопировать, назначить стажёру и настроить под него', 2400);
 await page.getByRole('button', { name: 'Стажёры', exact: true }).click();
-await page.locator('.team tbody tr').first().click();
+await page.locator('.cab-interns .person').first().hover();
+check('сводка о стажёре при наведении', await page.locator('.summary-pop').first().isVisible());
+await caption('Кабинет: все стажёры, отметки о просрочках и сводка при наведении — без лишних переходов', 2600);
+await page.locator('.cab-interns tbody tr').first().click();
+await page.locator('.intern-requests').waitFor();
+check('заявки стажёра в карточке', (await page.locator('.intern-requests .req').count()) >= 2);
 await page.locator('.program-panel').waitFor();
 await page.locator('#tpl-pick').selectOption({ label: 'Стажёр-аналитик' });
 page.once('dialog', (d) => void d.accept());
@@ -239,7 +249,35 @@ check('ответ по новой инструкции', (await lastAssistant().
 await pause(1500);
 await logout();
 
-// 10. Польза
+// 10. Регистрация: только ФИО, почта и пароль; отдел и роль назначает руководитель
+const email = `psidorov${Date.now()}@example.com`;
+await caption('Новый сотрудник регистрируется сам: ФИО, почта и пароль', 2000);
+await page.goto(BASE);
+await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+await page.getByLabel('ФИО').fill('Сидоров Пётр Андреевич');
+await page.getByLabel('Рабочая почта').fill(email);
+await page.getByLabel('Пароль').fill('secret2026');
+await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+await page.getByText('Ждём назначения').waitFor();
+check('после регистрации — ожидание назначения', true);
+await page.getByRole('button', { name: 'Выйти' }).click();
+await page.getByText('Войти тестовой учётной записью').waitFor();
+await loginAs('Мария Волкова');
+await page.getByRole('button', { name: 'Отдел и права', exact: true }).click();
+await page.getByText('Сидоров Пётр Андреевич').last().waitFor();
+await caption('Руководитель назначает роль и наставника и принимает в отдел', 2200);
+await page.getByRole('button', { name: 'Принять в отдел' }).last().click();
+await page.getByText('принят(а) в отдел').waitFor();
+check('руководитель принял сотрудника в отдел', true);
+await logout();
+await page.getByLabel('Логин или почта').fill(email);
+await page.getByLabel('Пароль').fill('secret2026');
+await page.getByRole('button', { name: 'Войти', exact: true }).click();
+await page.getByRole('button', { name: 'Мой план', exact: true }).waitFor();
+check('у нового стажёра открылся план', true);
+await logout();
+
+// 11. Польза
 await caption('Метрики пользы: доля вопросов без наставника и сэкономленные часы', 1800);
 await loginAs('Мария Волкова');
 await page.getByRole('button', { name: 'Польза', exact: true }).click();

@@ -38,7 +38,7 @@ export function PlanBody({ plan, internId, internName }: { plan: Plan; internId?
           <span className="num">{plan.percent}%</span>
         </div>
       </header>
-      <Goals internId={internId} canAdd={!!internId} />
+      <Goals internId={internId} canAdd={!!internId} steps={plan.periods.flatMap((p) => p.steps)} />
       <ol className="periods">
         {plan.periods.map((per) => (
           <li key={per.id} className={`period period-${per.state}`}>

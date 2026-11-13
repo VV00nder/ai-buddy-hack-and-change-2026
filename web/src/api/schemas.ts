@@ -2,7 +2,7 @@
 // от неожиданного ответа сервера.
 import { z } from 'zod';
 
-export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'engineer']);
+export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'engineer', 'newcomer']);
 export type Role = z.infer<typeof Role>;
 
 export const User = z.object({
@@ -23,7 +23,12 @@ export type User = z.infer<typeof User>;
 
 export const TeamInfo = z.object({ id: z.string(), name: z.string(), leadId: z.string(), leadName: z.string() });
 export type TeamInfo = z.infer<typeof TeamInfo>;
-export const Department = z.object({ members: z.array(User), teams: z.array(TeamInfo) });
+export const Department = z.object({
+  members: z.array(User),
+  teams: z.array(TeamInfo),
+  newcomers: z.array(User).nullish().transform((v) => v ?? []),
+  mentors: z.array(User).nullish().transform((v) => v ?? []),
+});
 export type Department = z.infer<typeof Department>;
 
 export const Source = z.object({ docId: z.string(), title: z.string(), section: z.string().optional() });
@@ -152,6 +157,7 @@ export const Approval = z.object({
   userName: z.string(),
   title: z.string(),
   details: Dict,
+  waitingHours: z.number().optional().default(0),
 });
 export type Approval = z.infer<typeof Approval>;
 
@@ -173,6 +179,9 @@ export const InternSummary = z.object({
 });
 export type InternSummary = z.infer<typeof InternSummary>;
 
+export const GoalTask = z.object({ id: z.string(), title: z.string(), stepId: z.string().optional(), done: z.boolean() });
+export type GoalTask = z.infer<typeof GoalTask>;
+
 export const Goal = z.object({
   id: z.string(),
   internId: z.string(),
@@ -181,6 +190,7 @@ export const Goal = z.object({
   due: z.string(),
   status: z.enum(['agreed', 'in_progress', 'done']),
   progress: z.number(),
+  tasks: z.array(GoalTask).nullish().transform((v) => v ?? []),
   note: z.string().optional(),
   createdBy: z.string(),
   createdAt: z.string(),
@@ -230,7 +240,13 @@ export type KbList = z.infer<typeof KbList>;
 
 export const Perm = z.enum(['kb', 'approvals', 'programs']);
 export type Perm = z.infer<typeof Perm>;
-export const Me = z.object({ user: User, perms: z.array(z.string()).nullish().transform((v) => v ?? []) });
+export const QuizLock = z.object({ quizId: z.string(), title: z.string(), until: z.string() });
+export type QuizLock = z.infer<typeof QuizLock>;
+export const Me = z.object({
+  user: User,
+  perms: z.array(z.string()).nullish().transform((v) => v ?? []),
+  activeQuiz: QuizLock.nullish(),
+});
 export type Me = z.infer<typeof Me>;
 
 export const QuizInfo = z.object({
@@ -291,6 +307,8 @@ export const QuizReviewItem = z.object({
   correct: z.number(),
   right: z.boolean(),
   explain: z.string().optional(),
+  docId: z.string().optional(),
+  docTitle: z.string().optional(),
 });
 export type QuizReviewItem = z.infer<typeof QuizReviewItem>;
 export const AttemptView = QuizAttempt.extend({ review: z.array(QuizReviewItem).nullish().transform((v) => v ?? []) });
@@ -356,3 +374,43 @@ export const Config = z.object({
 export type Config = z.infer<typeof Config>;
 
 export const Update = z.object({ type: z.string(), data: z.unknown() });
+
+export const InternCard = InternSummary.extend({
+  mentorName: z.string().optional().default(''),
+  pendingApprovals: z.number().optional().default(0),
+  waitingHours: z.number().optional().default(0),
+  openRequests: z.number().optional().default(0),
+  alerts: z.array(z.string()).nullish().transform((v) => v ?? []),
+});
+export type InternCard = z.infer<typeof InternCard>;
+
+export const Reminder = z.object({
+  id: z.string(),
+  ownerId: z.string(),
+  text: z.string(),
+  link: z.string().optional(),
+  at: z.string(),
+  sent: z.boolean(),
+  created: z.string(),
+});
+export type Reminder = z.infer<typeof Reminder>;
+
+export const Dashboard = z.object({
+  interns: z.array(InternCard),
+  approvals: z.array(Approval).nullish().transform((v) => v ?? []),
+  reminders: z.array(Reminder).nullish().transform((v) => v ?? []),
+  newcomers: z.number().optional().default(0),
+});
+export type Dashboard = z.infer<typeof Dashboard>;
+
+export const InternRequest = z.object({
+  id: z.string(),
+  kind: z.string(),
+  title: z.string(),
+  status: ActionStatus,
+  externalId: z.string().optional(),
+  comment: z.string().optional(),
+  createdAt: z.string(),
+  awaitingMe: z.boolean(),
+});
+export type InternRequest = z.infer<typeof InternRequest>;

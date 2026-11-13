@@ -58,7 +58,10 @@ test('client endpoints', async () => {
   await api.readNotifications();
   await api.decide('absence', 'ABS-1', true, 'ok');
   for (const p of [api.config(), api.send('x'), api.actions(), api.confirm('a'), api.cancel('a'), api.setStep('s', 'done'), api.team(),
-    api.internPlan('u'), api.approvals(), api.inbox(), api.answer('q', 'a', true), api.notifications(), api.insights(), api.docs(), api.doc('d')]) {
+    api.internPlan('u'), api.approvals(), api.inbox(), api.answer('q', 'a', true), api.notifications(), api.insights(), api.docs(), api.doc('d'),
+    api.dashboard(), api.internRequests('u 1'), api.reminders(), api.addReminder({ text: 'x', inHours: 1 }), api.deleteReminder('r1'),
+    api.assign('u-new', 'intern', 'u-oleg'), api.startQuiz('q1'), api.cancelQuiz(), api.setGoalTask('g1', 't1', true),
+    api.addGoalTask('g1', { title: 'MR' }), api.addGoal('u', { title: 'Цель', metric: 'м', due: '2026-12-01', tasks: [{ title: 'a' }] })]) {
     await p.catch(() => undefined); // ответы-заглушки не проходят схему — проверяем только адреса
   }
   const urls = calls.map((c) => `${c.init.method} ${c.url}`);
@@ -66,6 +69,10 @@ test('client endpoints', async () => {
   assert.ok(urls.includes('PATCH /api/plan/steps/s'));
   assert.ok(urls.includes('POST /api/approvals/absence/ABS-1'));
   assert.ok(urls.includes('POST /api/inbox/q/answer'));
+  for (const u of ['GET /api/dashboard', 'GET /api/team/u%201/requests', 'POST /api/reminders', 'DELETE /api/reminders/r1', 'POST /api/department/u-new/assign',
+    'POST /api/quizzes/q1/start', 'DELETE /api/quizzes/active', 'PATCH /api/goals/g1/tasks/t1', 'POST /api/goals/g1/tasks', 'POST /api/goals']) {
+    assert.ok(urls.includes(u), u);
+  }
 });
 
 test('sse subscription', () => {

@@ -154,6 +154,10 @@ func TestOfflineAccessScenario(t *testing.T) {
 	if r.Proposal != nil || !strings.Contains(r.Text, "staging") || !strings.Contains(r.Text, "пересмотр") || r.Context["awaiting"] != "access_justification" {
 		t.Fatalf("k8s: %+v", r)
 	}
+	// следующий вопрос — не обоснование: заявка не создаётся
+	if r := e.ask("Где посмотреть тестовый стенд поиска?", assistantCtx(r)); r.Proposal != nil && r.Proposal.Kind == "access" {
+		t.Fatalf("question taken as justification: %+v", r)
+	}
 	// redash требует обоснования — ждём его следующим сообщением
 	r = e.ask("нужен доступ к redash")
 	if r.Context["awaiting"] != "access_justification" {

@@ -89,7 +89,8 @@ func (a *Agent) handleOffline(ctx context.Context, req Request) Reply {
 			return a.absenceWithDates(ctx, req, r, awaiting["type"])
 		}
 	case awaiting["awaiting"] == "access_justification":
-		if utf8.RuneCountInString(strings.TrimSpace(req.Text)) >= 15 {
+		// новый вопрос («Где стенд?») — не обоснование: отвечаем на него, а не оформляем заявку
+		if utf8.RuneCountInString(strings.TrimSpace(req.Text)) >= 15 && !isQuestion(t) {
 			return a.accessFlow(ctx, req, accessReq{awaiting["system"], awaiting["project"], awaiting["level"], strings.TrimSpace(req.Text)})
 		}
 	case awaiting["awaiting"] == "access_project":
@@ -146,10 +147,7 @@ func (a *Agent) greet(ctx context.Context, req Request) Reply {
 }
 
 func firstName(full string) string {
-	if f := strings.Fields(full); len(f) > 0 {
-		return f[0]
-	}
-	return "коллега"
+	return domain.FirstName(full)
 }
 
 // earliestDayOff — ближайшая дата, на которую можно оформить отгул (за 2 рабочих дня).
@@ -496,4 +494,18 @@ func (a *Agent) kbAnswer(ctx context.Context, req Request) Reply {
 		b.WriteString("\n\n_Это ответ наставника команды на похожий вопрос._")
 	}
 	return Reply{Text: b.String(), Sources: sourcesOf(used), Answered: true}
+}
+
+// isQuestion — сообщение похоже на новый вопрос, а не на ответ на уточнение.
+func isQuestion(t string) bool {
+	t = strings.TrimSpace(t)
+	if strings.HasSuffix(t, "?") {
+		return true
+	}
+	for _, w := range []string{"где ", "как ", "что ", "кто ", "когда ", "почему ", "зачем ", "сколько ", "какой ", "какие ", "можно ли "} {
+		if strings.HasPrefix(t, w) {
+			return true
+		}
+	}
+	return false
 }
