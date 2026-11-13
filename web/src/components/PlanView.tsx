@@ -28,9 +28,14 @@ export function PlanBody({ plan, internId, internName }: { plan: Plan; internId?
             {internName ? `${plan.day}-й день, ` : ''}выполнено {plan.done} из {plan.total} шагов
             {plan.overdue > 0 ? `, просрочено ${plan.overdue}` : ''}
           </p>
+          {plan.templateName && (
+            <p className="small muted">
+              Программа «{plan.templateName}»{plan.customized ? ', настроена индивидуально' : ''}
+            </p>
+          )}
         </div>
         <div className="ring" style={{ ['--p' as string]: plan.percent }} aria-label={`Прогресс ${plan.percent}%`}>
-          <span>{plan.percent}%</span>
+          <span className="num">{plan.percent}%</span>
         </div>
       </header>
       <Goals internId={internId} canAdd={!!internId} />
@@ -62,7 +67,8 @@ export function StepRow({ s, internId, isNext }: { s: StepView; internId?: strin
   const set = useSetStep();
   const send = useSend();
   const go = useUi((st) => st.go);
-  const canEdit = internId ? true : s.owner === 'intern';
+  // шаг с тестом стажёр закрывает сдачей теста; наставник может отметить вручную
+  const canEdit = internId ? true : s.owner === 'intern' && !s.quiz;
   return (
     <li className={`step step-${s.status} ${s.overdue ? 'overdue' : ''} ${isNext ? 'is-next' : ''}`}>
       <button
@@ -77,17 +83,23 @@ export function StepRow({ s, internId, isNext }: { s: StepView; internId?: strin
           {s.title}
           {isNext && <span className="tag next-tag">следующий</span>}
           {s.owner === 'mentor' && <span className="tag">делает наставник</span>}
+          {s.quiz && <span className="tag quiz-tag">тест</span>}
           {s.overdue && <span className="tag overdue-tag">просрочен с {dayMonth(s.due)}</span>}
         </p>
         <p className="muted small">{s.description}</p>
         {s.note && <p className="small step-note">{s.note}</p>}
         <div className="step-actions">
           <span className="muted small">{s.category}, {stepStatusName[s.status]}</span>
-          {canEdit && s.status !== 'done' && s.status !== 'in_progress' && (
+          {canEdit && !s.quiz && s.status !== 'done' && s.status !== 'in_progress' && (
             <button className="link small" onClick={() => set.mutate({ stepId: s.id, status: 'in_progress', internId })}>Взять в работу</button>
           )}
           {canEdit && s.status !== 'done' && s.status !== 'blocked' && (
             <button className="link small" onClick={() => set.mutate({ stepId: s.id, status: 'blocked', internId, note: 'Нужна помощь' })}>Есть блокер</button>
+          )}
+          {!internId && s.quiz && (
+            <button className="link small" onClick={() => go('quizzes', { quizId: s.quiz! })}>
+              {s.status === 'done' ? 'Пройти тест ещё раз' : 'Пройти тест'}
+            </button>
           )}
           {!internId && s.prompt && s.status !== 'done' && (
             <button

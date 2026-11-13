@@ -26,7 +26,7 @@ export const msgs: Message[] = [
 ];
 
 export const plan: Plan = {
-  userId: 'u-anna', day: 4, currentPeriod: 'week1', done: 1, total: 3, percent: 33, overdue: 1,
+  userId: 'u-anna', templateId: 'intern-dev', templateName: 'Стажёр-разработчик', customized: false, day: 4, currentPeriod: 'week1', done: 1, total: 3, percent: 33, overdue: 1,
   next: { id: 's2', period: 'week1', owner: 'intern', category: 'Доступы', title: 'Получи доступ к Stash', description: 'd', prompt: 'Запроси доступ к Stash', status: 'todo', due: '2026-11-13', overdue: false },
   periods: [
     { id: 'week0', name: 'Подготовка', state: 'past', done: 0, total: 1, steps: [

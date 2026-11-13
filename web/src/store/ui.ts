@@ -1,7 +1,18 @@
 // Состояние интерфейса (Zustand): текущий раздел, тосты, связь с сервером.
 import { createStore, useStore } from 'zustand';
 
-export type View = 'chat' | 'plan' | 'requests' | 'knowledge' | 'inbox' | 'approvals' | 'team' | 'insights';
+export type View =
+  | 'chat'
+  | 'plan'
+  | 'requests'
+  | 'knowledge'
+  | 'quizzes'
+  | 'inbox'
+  | 'approvals'
+  | 'team'
+  | 'programs'
+  | 'rights'
+  | 'insights';
 
 export interface Toast {
   id: number;
@@ -13,10 +24,11 @@ interface UiState {
   view: View;
   internId: string | null;
   docId: string | null;
+  quizId: string | null;
   online: boolean;
   toasts: Toast[];
   draft: string;
-  go: (view: View, opts?: { internId?: string | null; docId?: string | null }) => void;
+  go: (view: View, opts?: { internId?: string | null; docId?: string | null; quizId?: string | null }) => void;
   setOnline: (v: boolean) => void;
   toast: (text: string, tone?: Toast['tone']) => void;
   dismiss: (id: number) => void;
@@ -29,10 +41,11 @@ export const uiStore = createStore<UiState>((set) => ({
   view: 'chat',
   internId: null,
   docId: null,
+  quizId: null,
   online: true,
   toasts: [],
   draft: '',
-  go: (view, opts = {}) => set({ view, internId: opts.internId ?? null, docId: opts.docId ?? null }),
+  go: (view, opts = {}) => set({ view, internId: opts.internId ?? null, docId: opts.docId ?? null, quizId: opts.quizId ?? null }),
   setOnline: (online) => set({ online }),
   toast: (text, tone = 'info') => {
     const id = ++seq;

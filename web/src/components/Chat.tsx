@@ -129,6 +129,7 @@ export function Bubble({ m, action, onSuggest, isLast }: { m: Message; action?: 
         </div>
       )}
       {action && <ActionCard action={action} />}
+      {m.quizId && <QuizButton id={m.quizId} />}
       {isLast && m.suggestions.length > 0 && (
         <div className="chips inline">
           {m.suggestions.map((s) => (
@@ -158,6 +159,15 @@ function SourceLink({ docId, label }: { docId: string; label: string }) {
   return (
     <button className="source" onClick={() => go('knowledge', { docId })}>
       {label}
+    </button>
+  );
+}
+
+function QuizButton({ id }: { id: string }) {
+  const go = useUi((s) => s.go);
+  return (
+    <button className="btn small quiz-cta" onClick={() => go('quizzes', { quizId: id })}>
+      Пройти тест
     </button>
   );
 }

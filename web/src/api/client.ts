@@ -45,7 +45,7 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     demoUsers: () => call('GET', '/api/auth/demo-users', obj({ users: S.User.array(), password: z.string() })),
     login: (login: string, password: string) => call('POST', '/api/auth/login', obj({ user: S.User }), { login, password }),
     logout: () => call('POST', '/api/auth/logout', ok),
-    me: () => call('GET', '/api/me', obj({ user: S.User })),
+    me: () => call('GET', '/api/me', S.Me),
     chat: () => call('GET', '/api/messages', S.ChatState),
     send: (text: string) => call('POST', '/api/messages', obj({ user: S.Message, assistant: S.Message }), { text }),
     feedback: (id: string, helpful: boolean) => call('POST', `/api/messages/${encodeURIComponent(id)}/feedback`, ok, { helpful }),
@@ -73,9 +73,58 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     notifications: () => call('GET', '/api/notifications', obj({ notifications: S.Notification.array() })),
     readNotifications: () => call('POST', '/api/notifications/read', ok),
     insights: () => call('GET', '/api/insights', S.Insights),
-    docs: () => call('GET', '/api/kb', obj({ docs: S.DocSummary.array() })),
+    docs: (q = '') => call('GET', `/api/kb${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`, S.KbList),
     doc: (id: string) => call('GET', `/api/kb/${encodeURIComponent(id)}`, S.Doc),
+    saveDoc: (id: string | null, d: DocInput) =>
+      id ? call('PUT', `/api/kb/${encodeURIComponent(id)}`, S.Doc, d) : call('POST', '/api/kb', S.Doc, d),
+    deleteDoc: (id: string) => call('DELETE', `/api/kb/${encodeURIComponent(id)}`, ok),
+    createFolder: (path: string) => call('POST', '/api/kb/folders', obj({ folders: z.array(z.string()) }), { path }),
+    deleteFolder: (path: string) => call('DELETE', `/api/kb/folders?path=${encodeURIComponent(path)}`, obj({ folders: z.array(z.string()) })),
+    quizzes: () => call('GET', '/api/quizzes', obj({ quizzes: S.QuizInfo.array() })),
+    quiz: (id: string) => call('GET', `/api/quizzes/${encodeURIComponent(id)}`, S.QuizPublic),
+    quizFull: (id: string) => call('GET', `/api/quizzes/${encodeURIComponent(id)}/edit`, S.QuizFull),
+    saveQuiz: (id: string | null, q: QuizInput) =>
+      id ? call('PUT', `/api/quizzes/${encodeURIComponent(id)}`, S.QuizFull, q) : call('POST', '/api/quizzes', S.QuizFull, q),
+    deleteQuiz: (id: string) => call('DELETE', `/api/quizzes/${encodeURIComponent(id)}`, ok),
+    submitQuiz: (id: string, answers: number[]) => call('POST', `/api/quizzes/${encodeURIComponent(id)}/submit`, S.QuizResult, { answers }),
+    quizResults: (internId?: string) =>
+      call('GET', `/api/quiz-results${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ attempts: S.QuizAttempt.array() })),
+    templates: () => call('GET', '/api/templates', obj({ templates: S.Template.array() })),
+    saveTemplate: (t: TemplateInput) =>
+      t.id ? call('PUT', `/api/templates/${encodeURIComponent(t.id)}`, S.Template, t) : call('POST', '/api/templates', S.Template, t),
+    deleteTemplate: (id: string) => call('DELETE', `/api/templates/${encodeURIComponent(id)}`, ok),
+    program: (internId: string) => call('GET', `/api/team/${encodeURIComponent(internId)}/program`, S.Program),
+    saveProgram: (internId: string, steps: S.TemplateStep[]) =>
+      call('PUT', `/api/team/${encodeURIComponent(internId)}/program`, S.Program, { steps }),
+    assignTemplate: (internId: string, templateId: string) =>
+      call('POST', `/api/team/${encodeURIComponent(internId)}/program/assign`, S.Program, { templateId }),
+    rights: () => call('GET', '/api/rights', obj({ members: S.Member.array() })),
+    setRight: (userId: string, perm: string, enabled: boolean) => call('POST', '/api/rights', obj({ members: S.Member.array() }), { userId, perm, enabled }),
   };
+}
+
+export interface DocInput {
+  title: string;
+  folder: string;
+  audience: string[];
+  tags: string[];
+  body: string;
+}
+
+export interface QuizInput {
+  title: string;
+  description?: string;
+  docIds: string[];
+  passPercent: number;
+  questions: S.QuizQuestion[];
+}
+
+export interface TemplateInput {
+  id?: string;
+  name: string;
+  description: string;
+  periods: S.Period[];
+  steps: S.TemplateStep[];
 }
 
 export type Api = ReturnType<typeof createApi>;

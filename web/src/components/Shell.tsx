@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { User } from '../api/schemas';
-import { useLiveUpdates, useNotifications, keys } from '../hooks/queries';
+import { useLiveUpdates, useNotifications, keys, usePerms } from '../hooks/queries';
 import { initials, relative, roleName } from '../lib/format';
 import { useUi, type View } from '../store/ui';
 import { useInstallPrompt, viewFromSearch } from '../pwa';
@@ -12,14 +12,20 @@ import { Inbox } from './Inbox';
 import { Insights } from './Insights';
 import { Knowledge } from './Knowledge';
 import { PlanView } from './PlanView';
+import { Programs } from './Programs';
+import { Quizzes } from './Quizzes';
 import { Requests } from './Requests';
+import { Rights } from './Rights';
 import { Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
-const navByRole: Record<User['role'], { view: View; label: string }[]> = {
+type NavItem = { view: View; label: string };
+
+const navByRole: Record<User['role'], NavItem[]> = {
   intern: [
     { view: 'chat', label: 'Чат' },
     { view: 'plan', label: 'Мой план' },
+    { view: 'quizzes', label: 'Тесты' },
     { view: 'requests', label: 'Заявки' },
     { view: 'knowledge', label: 'Инструкции' },
   ],
@@ -27,16 +33,21 @@ const navByRole: Record<User['role'], { view: View; label: string }[]> = {
     { view: 'inbox', label: 'Вопросы стажёров' },
     { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
+    { view: 'programs', label: 'Шаблоны обучения' },
     { view: 'insights', label: 'Польза' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
+    { view: 'quizzes', label: 'Тесты' },
   ],
   lead: [
     { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
+    { view: 'programs', label: 'Шаблоны обучения' },
+    { view: 'rights', label: 'Права' },
     { view: 'insights', label: 'Польза' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
+    { view: 'quizzes', label: 'Тесты' },
   ],
   engineer: [
     { view: 'approvals', label: 'Согласования' },
@@ -48,12 +59,22 @@ const navByRole: Record<User['role'], { view: View; label: string }[]> = {
     { view: 'insights', label: 'Польза' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
+    { view: 'quizzes', label: 'Тесты' },
   ],
 };
 
+/** navFor — разделы по роли и выданным правам. */
+export function navFor(role: User['role'], perms: Set<string>): NavItem[] {
+  const nav = [...navByRole[role]];
+  if (perms.has('approvals') && !nav.some((n) => n.view === 'approvals')) nav.unshift({ view: 'approvals', label: 'Согласования' });
+  if (perms.has('kb') && !nav.some((n) => n.view === 'quizzes')) nav.push({ view: 'quizzes', label: 'Тесты' });
+  return nav;
+}
+
 export function Shell({ user }: { user: User }) {
   const { view, go, online, toasts, dismiss } = useUi();
-  const nav = navByRole[user.role];
+  const perms = usePerms();
+  const nav = navFor(user.role, perms);
   const qc = useQueryClient();
   useLiveUpdates(true);
   const first = useRef(true);
@@ -110,6 +131,9 @@ export function Shell({ user }: { user: User }) {
           {view === 'plan' && <PlanView />}
           {view === 'requests' && <Requests />}
           {view === 'knowledge' && <Knowledge />}
+          {view === 'quizzes' && <Quizzes />}
+          {view === 'programs' && <Programs />}
+          {view === 'rights' && <Rights />}
           {view === 'inbox' && <Inbox />}
           {view === 'approvals' && <Approvals />}
           {view === 'team' && <Team />}

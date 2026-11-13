@@ -36,6 +36,7 @@ export const Message = z.object({
   trace: z.array(TraceItem).nullish().transform((v) => v ?? []),
   mode: z.string().optional(),
   feedback: z.boolean().optional(),
+  quizId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string().optional(),
 });
@@ -81,6 +82,7 @@ export const StepView = z.object({
   description: z.string(),
   docs: z.array(z.string()).nullish(),
   prompt: z.string().optional(),
+  quiz: z.string().optional(),
   status: StepStatus,
   note: z.string().optional(),
   due: z.string(),
@@ -100,6 +102,9 @@ export type PeriodView = z.infer<typeof PeriodView>;
 
 export const Plan = z.object({
   userId: z.string(),
+  templateId: z.string().optional().default(''),
+  templateName: z.string().optional().default(''),
+  customized: z.boolean().optional().default(false),
   day: z.number(),
   currentPeriod: z.string(),
   done: z.number(),
@@ -154,6 +159,10 @@ export const InternSummary = z.object({
   openQuestions: z.number(),
   goalsDone: z.number().optional().default(0),
   goalsTotal: z.number().optional().default(0),
+  templateName: z.string().optional().default(''),
+  customized: z.boolean().optional().default(false),
+  quizzesPassed: z.number().optional().default(0),
+  quizzesFailed: z.number().optional().default(0),
 });
 export type InternSummary = z.infer<typeof InternSummary>;
 
@@ -189,11 +198,139 @@ export const Insights = z.object({
 });
 export type Insights = z.infer<typeof Insights>;
 
-export const DocSummary = z.object({ id: z.string(), title: z.string(), tags: z.array(z.string()).nullish() });
+export const DocSummary = z.object({
+  id: z.string(),
+  title: z.string(),
+  tags: z.array(z.string()).nullish().transform((v) => v ?? []),
+  folder: z.string().optional().default(''),
+  custom: z.boolean().optional().default(false),
+  editable: z.boolean().optional().default(false),
+});
+export type DocSummary = z.infer<typeof DocSummary>;
 export const Doc = DocSummary.extend({
   sections: z.array(z.object({ heading: z.string(), text: z.string() })).nullish().transform((v) => v ?? []),
+  body: z.string().optional(),
+  audience: z.array(z.string()).nullish().transform((v) => v ?? []),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 export type Doc = z.infer<typeof Doc>;
+export const KbList = z.object({
+  docs: z.array(DocSummary),
+  folders: z.array(z.string()).nullish().transform((v) => v ?? []),
+});
+export type KbList = z.infer<typeof KbList>;
+
+export const Perm = z.enum(['kb', 'approvals', 'programs']);
+export type Perm = z.infer<typeof Perm>;
+export const Me = z.object({ user: User, perms: z.array(z.string()).nullish().transform((v) => v ?? []) });
+export type Me = z.infer<typeof Me>;
+
+export const QuizInfo = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  docIds: z.array(z.string()).nullish().transform((v) => v ?? []),
+  questions: z.number(),
+  passPercent: z.number(),
+  builtin: z.boolean(),
+  editable: z.boolean(),
+  attempts: z.number(),
+  best: z.number(),
+  passed: z.boolean(),
+});
+export type QuizInfo = z.infer<typeof QuizInfo>;
+export const QuizPublic = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  docIds: z.array(z.string()).nullish().transform((v) => v ?? []),
+  passPercent: z.number(),
+  questions: z.array(z.object({ text: z.string(), options: z.array(z.string()) })),
+});
+export type QuizPublic = z.infer<typeof QuizPublic>;
+export const QuizQuestion = z.object({
+  text: z.string(),
+  options: z.array(z.string()),
+  correct: z.number(),
+  explain: z.string().optional(),
+});
+export type QuizQuestion = z.infer<typeof QuizQuestion>;
+export const QuizFull = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  docIds: z.array(z.string()).nullish().transform((v) => v ?? []),
+  passPercent: z.number(),
+  questions: z.array(QuizQuestion),
+  builtin: z.boolean().optional().default(false),
+});
+export type QuizFull = z.infer<typeof QuizFull>;
+export const QuizAttempt = z.object({
+  id: z.string(),
+  quizId: z.string(),
+  title: z.string(),
+  correct: z.number(),
+  total: z.number(),
+  percent: z.number(),
+  passed: z.boolean(),
+  at: z.string(),
+});
+export type QuizAttempt = z.infer<typeof QuizAttempt>;
+export const QuizResult = z.object({
+  attempt: QuizAttempt,
+  review: z.array(
+    z.object({
+      text: z.string(),
+      options: z.array(z.string()),
+      chosen: z.number(),
+      correct: z.number(),
+      right: z.boolean(),
+      explain: z.string().optional(),
+    }),
+  ),
+  stepsDone: z.array(z.string()).nullish().transform((v) => v ?? []),
+});
+export type QuizResult = z.infer<typeof QuizResult>;
+
+export const TemplateStep = z.object({
+  id: z.string(),
+  period: z.string(),
+  owner: z.enum(['intern', 'mentor']),
+  category: z.string(),
+  title: z.string(),
+  description: z.string().optional().default(''),
+  docs: z.array(z.string()).nullish().transform((v) => v ?? undefined),
+  prompt: z.string().optional(),
+  quiz: z.string().optional(),
+  auto: z.object({ access: z.array(z.string()).nullish() }).nullish(),
+});
+export type TemplateStep = z.infer<typeof TemplateStep>;
+export const Period = z.object({ id: z.string(), name: z.string(), fromDay: z.number(), toDay: z.number() });
+export type Period = z.infer<typeof Period>;
+export const Template = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional().default(''),
+  team: z.string().optional(),
+  builtin: z.boolean(),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
+  periods: z.array(Period),
+  steps: z.array(TemplateStep),
+});
+export type Template = z.infer<typeof Template>;
+export const Program = z.object({
+  internId: z.string(),
+  baseId: z.string(),
+  customized: z.boolean(),
+  template: Template,
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type Program = z.infer<typeof Program>;
+export const Member = z.object({ user: User, perms: z.array(z.string()) });
+export type Member = z.infer<typeof Member>;
 
 export const Config = z.object({
   mode: z.enum(['llm', 'offline']),

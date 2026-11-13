@@ -66,7 +66,7 @@ export function GoalRow({ g, internId }: { g: Goal; internId?: string }) {
             onKeyUp={() => progress !== g.progress && m.mutate({ progress })}
             onTouchEnd={() => progress !== g.progress && m.mutate({ progress })}
           />
-          <span className="small">{progress}%</span>
+          <span className="small num pct">{progress}%</span>
         </label>
         {g.status !== 'done' ? (
           <button className="link small" disabled={m.isPending} onClick={() => m.mutate({ status: 'done' })}>Отметить выполненной</button>

@@ -17,7 +17,14 @@ export const keys = {
   team: ['team'] as const,
   insights: ['insights'] as const,
   internPlan: (id: string) => ['internPlan', id] as const,
-  docs: ['docs'] as const,
+  docs: (q = '') => ['docs', q] as const,
+  quizzes: ['quizzes'] as const,
+  quiz: (id: string) => ['quiz', id] as const,
+  quizFull: (id: string) => ['quizFull', id] as const,
+  quizResults: (internId = '') => ['quizResults', internId] as const,
+  templates: ['templates'] as const,
+  program: (internId: string) => ['program', internId] as const,
+  rights: ['rights'] as const,
   goals: (internId = '') => ['goals', internId] as const,
   doc: (id: string) => ['doc', id] as const,
 };
@@ -74,7 +81,12 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
     }
     case 'notification': {
       const n = S.Notification.safeParse(u.data);
-      if (n.success) qc.setQueryData<{ notifications: S.Notification[] }>(keys.notifications, (s) => ({ notifications: [n.data, ...(s?.notifications ?? [])] }));
+      if (n.success) {
+        qc.setQueryData<{ notifications: S.Notification[] }>(keys.notifications, (s) => ({ notifications: [n.data, ...(s?.notifications ?? [])] }));
+        // права и программы меняют руководитель и наставник — обновляем зависящие от них данные
+        if (n.data.kind === 'rights') void qc.invalidateQueries({ queryKey: keys.me });
+        if (n.data.kind === 'quiz') void qc.invalidateQueries({ queryKey: keys.team });
+      }
       break;
     }
     case 'plan': {
@@ -105,6 +117,12 @@ export function useLiveUpdates(enabled: boolean) {
 }
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: api.me, retry: false });
+
+/** usePerms — права текущего пользователя (инструкции, согласования, программы). */
+export function usePerms(): Set<string> {
+  const me = useMe();
+  return new Set(me.data?.perms ?? []);
+}
 export const useConfig = () => useQuery({ queryKey: keys.config, queryFn: api.config, staleTime: Infinity });
 
 export function useChat() {

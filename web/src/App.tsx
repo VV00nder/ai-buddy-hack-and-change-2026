@@ -26,7 +26,14 @@ export function Root() {
   }, [qc]);
   if (me.isPending) return <div className="boot" aria-busy="true">AI-buddy загружается…</div>;
   if (me.error instanceof ApiError && me.error.status === 401) {
-    return <Login onDone={(user) => qc.setQueryData(keys.me, { user })} />;
+    return (
+      <Login
+        onDone={(user) => {
+          qc.setQueryData(keys.me, { user, perms: [] });
+          void qc.invalidateQueries({ queryKey: keys.me });
+        }}
+      />
+    );
   }
   if (me.error || !me.data) {
     return (
