@@ -178,6 +178,20 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 				}
 				return s.SetUser(c, in.UserID, in.Role, in.Team, in.MentorID)
 			}},
+		{Info: mcp.ToolInfo{Name: "request_delete", Title: "Удалить заявку",
+			Description: "Руководитель сотрудника или администратор удаляет заявку на отсутствие или доступ.",
+			InputSchema: schema(map[string]any{"kind": str("Тип заявки", "absence", "access"), "id": str("ID заявки")}, "kind", "id")},
+			Roles: leads,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					Kind string `json:"kind"`
+					ID   string `json:"id"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.DeleteRequest(c, in.Kind, in.ID)
+			}},
 		{Info: mcp.ToolInfo{Name: "admin_reset_password", Title: "Сброс пароля",
 			Description: "Администратор задаёт сотруднику новый пароль.",
 			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "password": str("Новый пароль")}, "user_id", "password")},

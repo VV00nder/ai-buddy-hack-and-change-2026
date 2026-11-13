@@ -162,3 +162,42 @@ func (s *Service) ResetPassword(c identity.Claims, userID, password string) (map
 	s.persist()
 	return map[string]any{"user": p.User, "reset": true}, nil
 }
+
+// DeleteRequest — руководитель сотрудника или администратор удаляет заявку
+// (на отсутствие или доступ) из системы заявок.
+func (s *Service) DeleteRequest(c identity.Claims, kind, id string) (map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.outage {
+		return nil, errOutage
+	}
+	may := func(userID string) bool {
+		p, ok := s.users[userID]
+		return s.isAdmin(c.Sub) || (ok && p.LeadID == c.Sub && s.users[c.Sub] != nil && s.users[c.Sub].Role == domain.RoleLead)
+	}
+	switch kind {
+	case "absence":
+		for i, a := range s.absences {
+			if a.ID == id {
+				if !may(a.UserID) {
+					return nil, mcp.ErrForbidden
+				}
+				s.absences = slices.Delete(s.absences, i, i+1)
+				return map[string]any{"id": id, "deleted": true}, nil
+			}
+		}
+	case "access":
+		for i, r := range s.access {
+			if r.ID == id {
+				if !may(r.UserID) {
+					return nil, mcp.ErrForbidden
+				}
+				s.access = slices.Delete(s.access, i, i+1)
+				return map[string]any{"id": id, "deleted": true}, nil
+			}
+		}
+	default:
+		return nil, mcp.NewToolError("bad_kind", "kind: absence | access")
+	}
+	return nil, mcp.NewToolError("not_found", "Заявка не найдена")
+}

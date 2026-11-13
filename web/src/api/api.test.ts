@@ -63,7 +63,7 @@ test('client endpoints', async () => {
     api.assign('u-new', 'intern', 'u-oleg'), api.startQuiz('q1'), api.cancelQuiz(), api.setGoalTask('g1', 't1', true),
     api.addGoalTask('g1', { title: 'MR' }), api.addGoal('u', { title: 'Цель', metric: 'м', due: '2026-12-01', tasks: [{ title: 'a' }] }),
     api.adminService(), api.adminFlag('proactive', false), api.adminCron(), api.adminSetUser('u-ivan', { role: 'mentor', team: 'search' }),
-    api.adminPassword('u-anna', 'newpass2026')]) {
+    api.adminPassword('u-anna', 'newpass2026'), api.deleteRequest('u-anna', 'act1'), api.deleteQuestion('u-anna', 'q_1')]) {
     await p.catch(() => undefined); // ответы-заглушки не проходят схему — проверяем только адреса
   }
   const urls = calls.map((c) => `${c.init.method} ${c.url}`);
@@ -73,7 +73,7 @@ test('client endpoints', async () => {
   assert.ok(urls.includes('POST /api/inbox/q/answer'));
   for (const u of ['GET /api/dashboard', 'GET /api/team/u%201/requests', 'POST /api/reminders', 'DELETE /api/reminders/r1', 'POST /api/department/u-new/assign',
     'POST /api/quizzes/q1/start', 'DELETE /api/quizzes/active', 'PATCH /api/goals/g1/tasks/t1', 'POST /api/goals/g1/tasks', 'POST /api/goals',
-    'GET /api/admin/service', 'PUT /api/admin/flags/proactive', 'POST /api/admin/cron', 'PATCH /api/admin/users/u-ivan', 'POST /api/admin/users/u-anna/password']) {
+    'GET /api/admin/service', 'PUT /api/admin/flags/proactive', 'POST /api/admin/cron', 'PATCH /api/admin/users/u-ivan', 'POST /api/admin/users/u-anna/password', 'DELETE /api/team/u-anna/requests/act1', 'DELETE /api/team/u-anna/questions/q_1']) {
     assert.ok(urls.includes(u), u);
   }
 });

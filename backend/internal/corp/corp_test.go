@@ -793,6 +793,12 @@ func asList(v any) []any {
 			out[i] = l[i]
 		}
 		return out
+	case []AccessRequest:
+		out := make([]any, len(l))
+		for i := range l {
+			out[i] = l[i]
+		}
+		return out
 	case []map[string]any:
 		out := make([]any, len(l))
 		for i := range l {
@@ -801,4 +807,37 @@ func asList(v any) []any {
 		return out
 	}
 	return nil
+}
+
+func TestDeleteRequest(t *testing.T) {
+	s := newSvc(t)
+	abs, _ := s.CreateAbsence(claims(s, "anna"), AbsenceInput{Type: "day_off", DateFrom: "2026-11-24"})
+	id := abs["id"].(string)
+	for _, who := range []string{"oleg", "sergey", "anna"} {
+		if _, err := s.DeleteRequest(claims(s, who), "absence", id); toolCode(err) != "forbidden" {
+			t.Fatalf("%s deletes: %v", who, err)
+		}
+	}
+	if _, err := s.DeleteRequest(claims(s, "maria"), "vacation", id); toolCode(err) != "bad_kind" {
+		t.Fatal("bad kind")
+	}
+	if _, err := s.DeleteRequest(claims(s, "maria"), "absence", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeleteRequest(claims(s, "maria"), "absence", id); toolCode(err) != "not_found" {
+		t.Fatal("deleted twice")
+	}
+	r, err := s.RequestAccess(claims(s, "anna"), AccessInput{System: "redash", Justification: "Нужны дашборды для задачи SEARCH-90"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.ListAccess(claims(s, "anna"), "mine"); len(asList(l["items"])) != 1 {
+		t.Fatalf("access before delete: %+v", l)
+	}
+	if _, err := s.DeleteRequest(claims(s, "admin"), "access", r["id"].(string)); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.ListAccess(claims(s, "anna"), "mine"); len(asList(l["items"])) != 0 {
+		t.Fatalf("access left: %+v", l)
+	}
 }

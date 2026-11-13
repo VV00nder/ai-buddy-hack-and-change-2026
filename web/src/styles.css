@@ -628,3 +628,8 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 }
 .svc-block .cab-kpis { grid-area: auto; }
 .admin-department select { max-width: 260px; }
+.req { position: relative; }
+.req-del { margin-left: auto; color: var(--alert); }
+.req-del.confirm { display: inline-flex; gap: 6px; align-items: center; color: inherit; }
+.req .approval + .req-del { align-self: flex-start; }
+.ir-sub { font-size: 14px; margin-top: 6px; }

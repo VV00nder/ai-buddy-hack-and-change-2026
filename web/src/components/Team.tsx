@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { InternCard, InternRequest, Reminder } from '../api/schemas';
 import { keys } from '../hooks/queries';
@@ -106,11 +106,7 @@ export function Team() {
 function InternRow({ i, onOpen }: { i: InternCard; onOpen: () => void }) {
   const late = i.overdue > 0;
   // заявки стажёра раскрываются прямо в таблице — решение без перехода в карточку
-  // заявки, ждущие решения, раскрыты сразу — согласовать или отказать можно без лишнего клика
-  const [open, setOpen] = useState(i.pendingApprovals > 0);
-  useEffect(() => {
-    if (i.pendingApprovals > 0) setOpen(true); // новая заявка пришла, пока страница открыта
-  }, [i.pendingApprovals]);
+  const [open, setOpen] = useState(false);
   return (
     <>
       <tr className={`${late ? 'row-late' : ''} ${open ? 'row-open' : ''}`} onClick={onOpen}>
@@ -229,9 +225,33 @@ const reqStatus: Record<InternRequest['status'], string> = {
 
 /** Что стажёр просил согласовать: открытые заявки сверху, свои — с отметкой «ждёт вас». */
 export function InternRequests({ internId, compact = false }: { internId: string; compact?: boolean }) {
+  const qc = useQueryClient();
+  const toast = useUi((s) => s.toast);
   const q = useQuery({ queryKey: keys.internRequests(internId), queryFn: () => api.internRequests(internId) });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: keys.internRequests(internId) });
+    void qc.invalidateQueries({ queryKey: keys.dashboard });
+    void qc.invalidateQueries({ queryKey: keys.approvals });
+  };
+  const delReq = useMutation({
+    mutationFn: (id: string) => api.deleteRequest(internId, id),
+    onSuccess: () => {
+      toast('Заявка удалена — стажёр получил уведомление');
+      refresh();
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
+  const delQ = useMutation({
+    mutationFn: (id: string) => api.deleteQuestion(internId, id),
+    onSuccess: () => {
+      toast('Вопрос удалён — у наставника он больше не висит');
+      refresh();
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
   if (q.isPending) return null;
   if (q.isError) return <p className="error small">Заявки не загрузились: {q.error.message}</p>;
+  const { canDelete, questions } = q.data;
   const list = [...q.data.requests].sort((a, b) => Number(b.status === 'submitted') - Number(a.status === 'submitted'));
   const open = list.filter((r) => r.status === 'submitted').length;
   return (
@@ -260,10 +280,48 @@ export function InternRequests({ internId, compact = false }: { internId: string
                 {r.comment && <span className="small">«{r.comment}»</span>}
               </>
             )}
+            {canDelete && <DeleteButton what={`заявку «${r.title}»`} pending={delReq.isPending} onConfirm={() => delReq.mutate(r.id)} />}
           </li>
         ))}
       </ul>
+      {questions.length > 0 && (
+        <>
+          <h3 className="ir-sub">Вопросы наставнику</h3>
+          <ul className="req-list">
+            {questions.map((x) => (
+              <li key={x.id} className={`req req-q-${x.status}`}>
+                <span className="req-title">«{x.text}»</span>
+                <span className={`stamp ${x.status === 'open' ? 'stamp-submitted' : 'stamp-approved'}`}>{x.status === 'open' ? 'ждёт ответа' : 'отвечен'}</span>
+                <span className="small muted">
+                  {dayMonth(x.createdAt)}, {time(x.createdAt)}
+                  {x.mentorName && ` · ${x.mentorName}`}
+                </span>
+                {x.answer && <span className="small">Ответ: {x.answer}</span>}
+                {canDelete && <DeleteButton what="вопрос" pending={delQ.isPending} onConfirm={() => delQ.mutate(x.id)} />}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
+  );
+}
+
+/** Удаление в два шага: «Удалить» → «Удалить? Да / Нет», без системных диалогов. */
+export function DeleteButton({ what, pending, onConfirm }: { what: string; pending: boolean; onConfirm: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking)
+    return (
+      <button className="link small req-del" aria-label={`Удалить ${what}`} onClick={() => setAsking(true)}>
+        Удалить
+      </button>
+    );
+  return (
+    <span className="req-del confirm" role="group" aria-label={`Подтвердите удаление: ${what}`}>
+      <span className="small">Удалить? Стажёр получит уведомление.</span>
+      <button className="btn danger small" disabled={pending} onClick={onConfirm}>Да, удалить</button>
+      <button className="link small" onClick={() => setAsking(false)}>Нет</button>
+    </span>
   );
 }
 

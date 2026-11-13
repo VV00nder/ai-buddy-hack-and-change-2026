@@ -176,12 +176,24 @@ func (a *App) Inbox(ctx context.Context, u domain.User) ([]domain.Question, erro
 	if err != nil {
 		return nil, err
 	}
-	return qs, nil
+	return liveQuestions(qs), nil
+}
+
+// liveQuestions — без вопросов, удалённых руководителем.
+func liveQuestions(qs []domain.Question) []domain.Question {
+	out := make([]domain.Question, 0, len(qs))
+	for _, q := range qs {
+		if q.Status != QuestionDeleted {
+			out = append(out, q)
+		}
+	}
+	return out
 }
 
 // MyQuestions — вопросы стажёра наставнику.
 func (a *App) MyQuestions(ctx context.Context, u domain.User) ([]domain.Question, error) {
-	return a.store.QuestionsOfIntern(ctx, u.ID)
+	qs, err := a.store.QuestionsOfIntern(ctx, u.ID)
+	return liveQuestions(qs), err
 }
 
 // AnswerQuestion — наставник отвечает; ответ приходит стажёру в чат и,
@@ -189,6 +201,9 @@ func (a *App) MyQuestions(ctx context.Context, u domain.User) ([]domain.Question
 func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer string, addToFAQ bool) (domain.Question, error) {
 	q, err := a.store.Question(ctx, qid)
 	if err != nil {
+		return q, ErrNotFound
+	}
+	if q.Status == QuestionDeleted {
 		return q, ErrNotFound
 	}
 	if q.MentorID != u.ID {

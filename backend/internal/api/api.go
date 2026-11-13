@@ -125,6 +125,8 @@ func (s *Server) Handler() http.Handler {
 	auth("POST /api/department/{user}/assign", s.assignNewcomer)
 	auth("GET /api/dashboard", s.dashboard)
 	auth("GET /api/team/{intern}/requests", s.internRequests)
+	auth("DELETE /api/team/{intern}/requests/{id}", s.deleteRequest)
+	auth("DELETE /api/team/{intern}/questions/{id}", s.deleteQuestion)
 	auth("GET /api/reminders", s.reminders)
 	auth("POST /api/reminders", s.addReminder)
 	auth("DELETE /api/reminders/{id}", s.deleteReminder)
@@ -425,12 +427,34 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) internRequests(w http.ResponseWriter, r *http.Request) {
-	rs, err := s.app.InternRequests(r.Context(), sessionFrom(r), r.PathValue("intern"))
+	ses, id := sessionFrom(r), r.PathValue("intern")
+	rs, err := s.app.InternRequests(r.Context(), ses, id)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"requests": rs})
+	qs, err := s.app.InternQuestions(r.Context(), ses, id)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"requests": rs, "questions": qs, "canDelete": s.app.CanManageIntern(r.Context(), ses.User, id)})
+}
+
+func (s *Server) deleteRequest(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteRequest(r.Context(), sessionFrom(r), r.PathValue("intern"), r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) deleteQuestion(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteQuestion(r.Context(), sessionFrom(r), r.PathValue("intern"), r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func (s *Server) reminders(w http.ResponseWriter, r *http.Request) {

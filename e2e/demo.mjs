@@ -122,6 +122,7 @@ await logout();
 await caption('Руководитель Мария видит заявки внутри строки стажёра и решает в один клик', 1800);
 await loginAs('Мария Волкова');
 check('у руководителя нет отдельной вкладки согласований', (await page.getByRole('button', { name: 'Согласования', exact: true }).count()) === 0);
+await page.locator('.cab-interns tbody tr', { hasText: 'Анна Смирнова' }).first().locator('.req-toggle').click();
 await page.locator('.row-expand .approval').first().waitFor();
 check('у руководителя только отгул — внутри строки Анны', (await page.locator('.approval').count()) === 1);
 await pause(1200);
@@ -289,6 +290,7 @@ await page.locator('.stamp', { hasText: /согласовании/i }).last().wa
 await logout();
 await loginAs('Мария Волкова');
 await page.getByRole('button', { name: 'Стажёры', exact: true }).click();
+await page.locator('.cab-interns tbody tr', { hasText: 'Сидоров Пётр' }).first().locator('.req-toggle').click();
 await caption('Заявки стажёра раскрываются прямо в строке: согласовать или отказать с причиной', 2400);
 const exp = page.locator('.row-expand', { hasText: 'Сидоров Пётр' }).first();
 await exp.getByRole('button', { name: 'Отказать' }).click();
@@ -297,6 +299,12 @@ await exp.getByRole('button', { name: 'Отказать' }).click();
 await page.getByText('Отказано — стажёр получил уведомление с причиной').waitFor();
 await page.locator('.row-expand .stamp-rejected').first().waitFor();
 check('руководитель отказал с причиной из строки стажёра', true);
+await caption('Руководитель может удалить заявку или вопрос стажёра', 1800);
+const rejected = page.locator('.row-expand .req', { has: page.locator('.stamp-rejected') }).first();
+await rejected.getByRole('button', { name: /^Удалить/ }).click();
+await rejected.getByRole('button', { name: 'Да, удалить' }).click();
+await page.getByText('Заявка удалена — стажёр получил уведомление').waitFor();
+check('руководитель удалил заявку стажёра', (await page.locator('.row-expand .stamp-rejected').count()) === 0);
 await logout();
 
 // администратор: сервис и все сотрудники

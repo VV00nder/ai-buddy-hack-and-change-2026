@@ -68,7 +68,20 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
       call('PATCH', `/api/goals/${encodeURIComponent(goalId)}/tasks/${encodeURIComponent(taskId)}`, obj({ goal: S.Goal }), { done }),
     addGoalTask: (goalId: string, t: TaskInput) => call('POST', `/api/goals/${encodeURIComponent(goalId)}/tasks`, obj({ goal: S.Goal }), t),
     dashboard: () => call('GET', '/api/dashboard', S.Dashboard),
-    internRequests: (id: string) => call('GET', `/api/team/${encodeURIComponent(id)}/requests`, obj({ requests: S.InternRequest.array() })),
+    internRequests: (id: string) =>
+      call(
+        'GET',
+        `/api/team/${encodeURIComponent(id)}/requests`,
+        obj({
+          requests: S.InternRequest.array(),
+          questions: S.InternQuestion.array().nullish().transform((v) => v ?? []),
+          canDelete: z.boolean().optional().default(false),
+        }),
+      ),
+    deleteRequest: (internId: string, id: string) =>
+      call('DELETE', `/api/team/${encodeURIComponent(internId)}/requests/${encodeURIComponent(id)}`, ok),
+    deleteQuestion: (internId: string, id: string) =>
+      call('DELETE', `/api/team/${encodeURIComponent(internId)}/questions/${encodeURIComponent(id)}`, ok),
     reminders: () => call('GET', '/api/reminders', obj({ reminders: S.Reminder.array() })),
     addReminder: (r: { text: string; link?: string; inHours?: number; at?: string }) => call('POST', '/api/reminders', S.Reminder, r),
     deleteReminder: (id: string) => call('DELETE', `/api/reminders/${encodeURIComponent(id)}`, ok),

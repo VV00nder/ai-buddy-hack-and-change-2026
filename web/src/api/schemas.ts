@@ -457,3 +457,13 @@ export const CronReport = z.object({
   reminders: z.number(),
 });
 export type CronReport = z.infer<typeof CronReport>;
+
+export const InternQuestion = z.object({
+  id: z.string(),
+  text: z.string(),
+  status: z.string(),
+  answer: z.string().optional(),
+  mentorName: z.string().optional(),
+  createdAt: z.string(),
+});
+export type InternQuestion = z.infer<typeof InternQuestion>;

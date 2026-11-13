@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +10,9 @@ import (
 	"unicode/utf8"
 
 	"aibuddy/internal/domain"
+	"aibuddy/internal/events"
 	"aibuddy/internal/kv"
+	"aibuddy/internal/mcp"
 )
 
 // Кабинет руководителя и наставника: всё на одной странице — что ждёт решения,
@@ -288,4 +291,132 @@ func comment(ac domain.Action) string {
 		return c
 	}
 	return ac.Error
+}
+
+// QuestionDeleted — вопрос удалён руководителем: не виден наставнику и стажёру.
+const QuestionDeleted = "deleted"
+
+// canManageIntern — руководитель стажёра или администратор: может удалять его заявки и вопросы.
+func canManageIntern(actor, intern domain.User) bool {
+	return isAdmin(actor) || (actor.Role == domain.RoleLead && intern.LeadID == actor.ID)
+}
+
+// InternQuestion — вопрос стажёра наставнику в его карточке.
+type InternQuestion struct {
+	ID         string    `json:"id"`
+	Text       string    `json:"text"`
+	Status     string    `json:"status"`
+	Answer     string    `json:"answer,omitempty"`
+	MentorName string    `json:"mentorName,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// InternQuestions — вопросы стажёра наставнику (без удалённых).
+func (a *App) InternQuestions(ctx context.Context, s kv.Session, internID string) ([]InternQuestion, error) {
+	intern, ok := a.userByID(ctx, internID)
+	if !ok || intern.Role != domain.RoleIntern {
+		return nil, ErrNotFound
+	}
+	if !canViewIntern(s.User, intern) {
+		return nil, ErrForbidden
+	}
+	qs, err := a.store.QuestionsOfIntern(ctx, internID)
+	if err != nil {
+		return nil, err
+	}
+	out := []InternQuestion{}
+	for _, q := range liveQuestions(qs) {
+		iq := InternQuestion{ID: q.ID, Text: q.Text, Status: q.Status, Answer: q.Answer, CreatedAt: q.CreatedAt}
+		if m, ok := a.userByID(ctx, q.MentorID); ok {
+			iq.MentorName = m.Name
+		}
+		out = append(out, iq)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+// CanManageIntern — может ли пользователь удалять заявки и вопросы стажёра.
+func (a *App) CanManageIntern(ctx context.Context, u domain.User, internID string) bool {
+	intern, ok := a.userByID(ctx, internID)
+	return ok && canManageIntern(u, intern)
+}
+
+// DeleteRequest — руководитель стажёра или администратор удаляет его заявку
+// (в том числе из системы заявок). Стажёр получает уведомление.
+func (a *App) DeleteRequest(ctx context.Context, s kv.Session, internID, actionID string) error {
+	intern, ok := a.userByID(ctx, internID)
+	if !ok {
+		return ErrNotFound
+	}
+	if !canManageIntern(s.User, intern) {
+		return ErrForbidden
+	}
+	act, err := a.store.Action(ctx, actionID)
+	if err != nil || act.UserID != intern.ID || act.Status == domain.ActionCancelled {
+		return ErrNotFound
+	}
+	switch act.Kind {
+	case domain.ActionMentorQuestion:
+		if act.ExternalID != "" {
+			return a.DeleteQuestion(ctx, s, internID, act.ExternalID)
+		}
+	case domain.ActionAbsence, domain.ActionAccess:
+		if act.ExternalID != "" {
+			kind := map[domain.ActionKind]string{domain.ActionAbsence: "absence", domain.ActionAccess: "access"}[act.Kind]
+			_, err := a.corp.Call(ctx, s.Token, "request_delete", map[string]any{"kind": kind, "id": act.ExternalID})
+			var ce *mcp.CallError
+			switch {
+			case errors.As(err, &ce) && ce.Code == "forbidden":
+				return ErrForbidden
+			case errors.As(err, &ce) && ce.Code != "not_found":
+				return invalid("%s", ce.Message)
+			case err != nil && !errors.As(err, &ce):
+				return ErrUnavailable
+			}
+		}
+	}
+	return a.dropAction(ctx, s, act, "удалил(а) заявку")
+}
+
+// DeleteQuestion — руководитель стажёра или администратор удаляет вопрос наставнику.
+func (a *App) DeleteQuestion(ctx context.Context, s kv.Session, internID, questionID string) error {
+	intern, ok := a.userByID(ctx, internID)
+	if !ok {
+		return ErrNotFound
+	}
+	if !canManageIntern(s.User, intern) {
+		return ErrForbidden
+	}
+	q, err := a.store.Question(ctx, questionID)
+	if err != nil || q.InternID != intern.ID || q.Status == QuestionDeleted {
+		return ErrNotFound
+	}
+	q.Status = QuestionDeleted
+	if err := a.store.SaveQuestion(ctx, q); err != nil {
+		return err
+	}
+	a.hub.Publish(q.MentorID, events.Update{Type: "question", Data: q})
+	if act, err := a.store.ActionByExternalID(ctx, q.ID); err == nil && act.Status != domain.ActionCancelled {
+		return a.dropAction(ctx, s, act, "удалил(а) вопрос наставнику")
+	}
+	a.notify(ctx, intern.ID, "action", fmt.Sprintf("%s удалил(а) вопрос наставнику: «%s»", s.User.Name, q.Text), "/")
+	a.Track(ctx, s.User.ID, "request_deleted", map[string]any{"kind": "mentor_question"})
+	return nil
+}
+
+// dropAction помечает заявку отменённой и сообщает стажёру.
+func (a *App) dropAction(ctx context.Context, s kv.Session, act domain.Action, verb string) error {
+	act.Status, act.UpdatedAt = domain.ActionCancelled, a.now()
+	if act.Result == nil {
+		act.Result = map[string]any{}
+	}
+	act.Result["deleted_by"] = s.User.Name
+	if err := a.store.SaveAction(ctx, act); err != nil {
+		return err
+	}
+	a.hub.Publish(act.UserID, events.Update{Type: "action", Data: act})
+	a.notify(ctx, act.UserID, "action", fmt.Sprintf("%s %s: %s", s.User.Name, verb, actionLabel(act)), "/actions/"+act.ID)
+	a.Track(ctx, s.User.ID, "request_deleted", map[string]any{"kind": act.Kind})
+	return nil
 }

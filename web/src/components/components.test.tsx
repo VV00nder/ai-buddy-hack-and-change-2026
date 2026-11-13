@@ -25,7 +25,7 @@ import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
 import { navFor, Shell } from './Shell';
-import { InternRequests, Team } from './Team';
+import { DeleteButton, InternRequests, Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
 // В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
@@ -116,6 +116,11 @@ function seeded() {
       { id: 'act2', kind: 'absence', title: 'Отгул 13.11', status: 'submitted', externalId: 'ABS-1', createdAt: '2026-11-11T10:00:00Z', awaitingMe: true,
         approval: { kind: 'absence', externalId: 'ABS-1', userId: 'u-anna', userName: 'Анна Смирнова', title: 'Отгул на 13.11 (пт)', waitingHours: 5, details: { reason: 'учёба' } } },
     ],
+    questions: [
+      { id: 'q_1', text: 'Где тестовый стенд?', status: 'open', mentorName: 'Олег Кузнецов', createdAt: '2026-11-11T11:00:00Z' },
+      { id: 'q_2', text: 'Где логи?', status: 'answered', answer: 'В Observer', createdAt: '2026-11-10T11:00:00Z' },
+    ],
+    canDelete: true,
   });
   qc.setQueryData(['quizRun', 'quiz-dayoff'], qc.getQueryData(keys.quiz('quiz-dayoff')));
   return qc;
@@ -248,9 +253,9 @@ test('mentor and lead screens', () => {
   // заявки стажёра — внутри его строки, раскрыты сразу; отдельного списка заявок стажёров нет
   assert.doesNotMatch(team, /Ждут вашего решения/);
   assert.doesNotMatch(team, /Kubernetes, администрирование/);
-  assert.match(team, /row-expand/);
-  assert.match(team, /Отгул на 13.11 \(пт\)/);
-  assert.match(team, /aria-expanded="true"/);
+  // строка не раскрывается сама — заявки по кнопке в колонке «Заявки»
+  assert.doesNotMatch(team, /row-expand/);
+  assert.match(team, /aria-expanded="false"/);
   const withOthers = seeded();
   const dash = withOthers.getQueryData<{ approvals: unknown[] }>(keys.dashboard)!;
   withOthers.setQueryData(keys.dashboard, {
@@ -611,6 +616,16 @@ test('admin: nav, service, all employees; reject with reason; requests inline', 
   assert.match(rf, /disabled=""[^>]*>Отказать/);
   assert.doesNotMatch(html(<RejectForm kind="access" reason="Хватит чтения" onReason={() => undefined} pending={false} onSubmit={() => undefined} onCancel={() => undefined} />), /disabled=""[^>]*>Отказать/);
   const inline = html(<InternRequests internId="u-anna" compact />);
+  assert.match(inline, /Вопросы наставнику/);
+  assert.match(inline, /Где тестовый стенд\?/);
+  assert.match(inline, /ждёт ответа/);
+  assert.match(inline, /Ответ: В Observer/);
+  assert.equal((inline.match(/>Удалить</g) ?? []).length, 4);
+  const ro = seeded();
+  const cur = ro.getQueryData<Record<string, unknown>>(keys.internRequests('u-anna'))!;
+  ro.setQueryData(keys.internRequests('u-anna'), { ...cur, canDelete: false });
+  assert.doesNotMatch(html(<InternRequests internId="u-anna" />, ro), />Удалить</);
+  assert.match(html(<DeleteButton what="заявку" pending={false} onConfirm={() => undefined} />), /aria-label="Удалить заявку"/);
   assert.match(inline, /intern-requests compact/);
   assert.match(inline, />Отказать</);
 });
