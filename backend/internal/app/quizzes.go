@@ -32,7 +32,7 @@ type QuizInfo struct {
 }
 
 func quizVisible(q *quiz.Quiz, u domain.User) bool {
-	return q.Team == "all" || q.Team == "" || q.Team == u.Team
+	return q.Team == "all" || q.Team == "" || sameTeam(u, q.Team)
 }
 
 func (a *App) allQuizzes(ctx context.Context) ([]*quiz.Quiz, error) {
@@ -89,7 +89,7 @@ func (a *App) Quizzes(ctx context.Context, u domain.User) ([]QuizInfo, error) {
 			continue
 		}
 		info := QuizInfo{ID: q.ID, Title: q.Title, Description: q.Description, DocIDs: q.DocIDs, Questions: len(q.Questions),
-			PassPercent: q.PassPercent, Builtin: q.Builtin, Editable: editor && !q.Builtin && q.Team == u.Team}
+			PassPercent: q.PassPercent, Builtin: q.Builtin, Editable: editor && !q.Builtin && sameTeam(u, q.Team)}
 		if info.DocIDs == nil {
 			info.DocIDs = []string{}
 		}
@@ -277,6 +277,7 @@ func (a *App) SaveQuiz(ctx context.Context, u domain.User, in quiz.Quiz) (*quiz.
 	if !a.canEditKB(ctx, u) {
 		return nil, ErrForbidden
 	}
+	team := contentTeam(u)
 	if in.ID == "" {
 		in.ID = newID("quiz")
 	} else {
@@ -287,11 +288,12 @@ func (a *App) SaveQuiz(ctx context.Context, u domain.User, in quiz.Quiz) (*quiz.
 		if cur.Builtin {
 			return nil, invalid("Встроенный тест нельзя изменить — создайте новый")
 		}
-		if cur.Team != u.Team {
+		if !sameTeam(u, cur.Team) {
 			return nil, ErrForbidden
 		}
+		team = cur.Team
 	}
-	q := &quiz.Quiz{ID: in.ID, Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description), Team: u.Team,
+	q := &quiz.Quiz{ID: in.ID, Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description), Team: team,
 		PassPercent: in.PassPercent, Questions: in.Questions, DocIDs: []string{}, UpdatedBy: u.Name, UpdatedAt: a.now().Format(time.RFC3339)}
 	if q.PassPercent == 0 {
 		q.PassPercent = 80
@@ -321,7 +323,7 @@ func (a *App) DeleteQuiz(ctx context.Context, u domain.User, id string) error {
 	if q.Builtin {
 		return invalid("Встроенный тест нельзя удалить")
 	}
-	if q.Team != u.Team {
+	if !sameTeam(u, q.Team) {
 		return ErrForbidden
 	}
 	return a.store.DeleteRecord(ctx, recQuiz, id)

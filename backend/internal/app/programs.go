@@ -45,7 +45,7 @@ func (a *App) Templates(ctx context.Context, u domain.User) ([]*onboarding.Templ
 		return nil, err
 	}
 	for _, t := range custom {
-		if t.Team == u.Team {
+		if t.Team == u.Team || t.Team == "all" || isAdmin(u) {
 			out = append(out, t)
 		}
 	}
@@ -90,6 +90,7 @@ func (a *App) SaveTemplate(ctx context.Context, u domain.User, in onboarding.Tem
 	if !canManagePrograms(u) {
 		return nil, ErrForbidden
 	}
+	team := contentTeam(u)
 	if in.ID == "" {
 		in.ID = newID("tpl")
 	} else {
@@ -100,11 +101,15 @@ func (a *App) SaveTemplate(ctx context.Context, u domain.User, in onboarding.Tem
 		if cur.Builtin {
 			return nil, invalid("Встроенный шаблон нельзя изменить — сделайте копию")
 		}
+		if !sameTeam(u, cur.Team) {
+			return nil, ErrForbidden
+		}
+		team = cur.Team
 	}
 	if len(in.Periods) == 0 {
 		in.Periods = a.tpl.Clone().Periods
 	}
-	t := &onboarding.Template{ID: in.ID, Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Team: u.Team,
+	t := &onboarding.Template{ID: in.ID, Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Team: team,
 		UpdatedBy: u.Name, UpdatedAt: a.now().Format(time.RFC3339), Periods: in.Periods, Steps: normalizeSteps(in.Steps)}
 	if err := a.checkTemplate(ctx, u, t); err != nil {
 		return nil, err
@@ -141,6 +146,9 @@ func (a *App) DeleteTemplate(ctx context.Context, u domain.User, id string) erro
 	}
 	if t.Builtin {
 		return invalid("Встроенный шаблон нельзя удалить")
+	}
+	if !sameTeam(u, t.Team) {
+		return ErrForbidden
 	}
 	return a.store.DeleteRecord(ctx, recTemplate, id)
 }

@@ -32,6 +32,7 @@ export const roleName: Record<Role, string> = {
   hrbp: 'HR BP',
   engineer: 'Инженер',
   newcomer: 'Ожидает назначения',
+  admin: 'Администратор',
 };
 
 export const levelName: Record<string, string> = { read: 'чтение', edit: 'редактирование', admin: 'администрирование' };

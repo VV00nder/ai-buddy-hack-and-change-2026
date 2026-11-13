@@ -101,7 +101,7 @@ func (a *App) goalTasks(ctx context.Context, intern domain.User, in []TaskInput)
 }
 
 func canSetGoals(actor, intern domain.User) bool {
-	return (actor.Role == domain.RoleLead && intern.LeadID == actor.ID) || (actor.Role == domain.RoleMentor && intern.MentorID == actor.ID)
+	return actor.Role == domain.RoleAdmin || (actor.Role == domain.RoleLead && intern.LeadID == actor.ID) || (actor.Role == domain.RoleMentor && intern.MentorID == actor.ID)
 }
 
 // Goals — цели стажёра.

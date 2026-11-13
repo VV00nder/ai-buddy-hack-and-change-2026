@@ -9,7 +9,7 @@ import { keys, makeQueryClient } from '../hooks/queries';
 import { uiStore, useUi, type View } from '../store/ui';
 import { absence, anna, insights, maria, msgs, oleg, plan } from '../test-fixtures';
 import { ActionCard, editableFields, facts } from './ActionCard';
-import { ApprovalRow, Approvals } from './Approvals';
+import { ApprovalRow, Approvals, RejectForm } from './Approvals';
 import { Bubble, Chat } from './Chat';
 import { AnswerForm, Inbox } from './Inbox';
 import { Insights, InsightsBody } from './Insights';
@@ -17,14 +17,15 @@ import { buildTree, DocEditor, DocView, FolderForm, Knowledge } from './Knowledg
 import { ProgramPanel, Programs, StepEditor, TemplateEditor } from './Programs';
 import { AttemptAnswers, QuizResultsPanel, TeamQuizResults } from './QuizResults';
 import { QuizEditor, QuizForm, QuizReview, QuizRunner, Quizzes } from './Quizzes';
-import { Department, Rights } from './Rights';
+import { AdminDepartment, Department, Rights } from './Rights';
+import { eventText, Service } from './Service';
 import { Register } from './Login';
 import { Waiting } from './Waiting';
 import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
 import { navFor, Shell } from './Shell';
-import { Team } from './Team';
+import { InternRequests, Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
 // В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
@@ -112,7 +113,8 @@ function seeded() {
   qc.setQueryData(keys.internRequests('u-anna'), {
     requests: [
       { id: 'act1', kind: 'access', title: 'Доступ: Stash', status: 'approved', externalId: 'ACC-1', comment: 'ок', createdAt: '2026-11-10T10:00:00Z', awaitingMe: false },
-      { id: 'act2', kind: 'absence', title: 'Отгул 13.11', status: 'submitted', externalId: 'ABS-1', createdAt: '2026-11-11T10:00:00Z', awaitingMe: true },
+      { id: 'act2', kind: 'absence', title: 'Отгул 13.11', status: 'submitted', externalId: 'ABS-1', createdAt: '2026-11-11T10:00:00Z', awaitingMe: true,
+        approval: { kind: 'absence', externalId: 'ABS-1', userId: 'u-anna', userName: 'Анна Смирнова', title: 'Отгул на 13.11 (пт)', waitingHours: 5, details: { reason: 'учёба' } } },
     ],
   });
   qc.setQueryData(['quizRun', 'quiz-dayoff'], qc.getQueryData(keys.quiz('quiz-dayoff')));
@@ -243,8 +245,21 @@ test('mentor and lead screens', () => {
   assert.match(team, /отстаёт от плана: просрочено 1/);
   assert.match(team, /Наставник<\/dt><dd>Олег Кузнецов/);
   assert.match(team, /1 ждут вас · 1 дн/);
-  assert.match(team, /Ждут вашего решения/);
-  assert.match(team, /Kubernetes, администрирование/);
+  // заявки стажёра — внутри его строки, раскрыты сразу; отдельного списка заявок стажёров нет
+  assert.doesNotMatch(team, /Ждут вашего решения/);
+  assert.doesNotMatch(team, /Kubernetes, администрирование/);
+  assert.match(team, /row-expand/);
+  assert.match(team, /Отгул на 13.11 \(пт\)/);
+  assert.match(team, /aria-expanded="true"/);
+  const withOthers = seeded();
+  const dash = withOthers.getQueryData<{ approvals: unknown[] }>(keys.dashboard)!;
+  withOthers.setQueryData(keys.dashboard, {
+    ...dash,
+    approvals: [...dash.approvals, { kind: 'absence', externalId: 'ABS-9', userId: 'u-pavel', userName: 'Павел Егоров', title: 'Отпуск 01.12–05.12', waitingHours: 2, details: {} }],
+  });
+  const other = html(<Team />, withOthers);
+  assert.match(other, /Заявки сотрудников/);
+  assert.match(other, /Отпуск 01.12–05.12/);
   assert.match(team, /Проверить SEARCH-101/);
   assert.match(team, /новых сотрудников ждут назначения/);
   useUi.getState().go('team', { internId: 'u-anna' });
@@ -254,6 +269,10 @@ test('mentor and lead screens', () => {
   assert.match(det, /1 не согласовано/);
   assert.match(det, /ждёт вашего решения/);
   assert.match(det, /согласовано/);
+  // решение прямо в карточке стажёра
+  assert.match(det, /Отгул на 13.11 \(пт\)/);
+  assert.match(det, />Согласовать</);
+  assert.match(det, />Отказать</);
   useUi.getState().go('team');
   const noT = seeded();
   noT.setQueryData(keys.dashboard, { interns: [], approvals: [], reminders: [], newcomers: 0 });
@@ -527,4 +546,71 @@ test('registration and department transfer', () => {
   assert.match(dep, /petr@example.com/);
   assert.match(html(<Department />, makeQueryClient()), /Загружаю отдел/);
   assert.match(html(<Rights />, asLead()), /Сотрудники отдела/);
+});
+
+test('admin: nav, service, all employees; reject with reason; requests inline', () => {
+  const admin = { ...maria, id: 'u-admin', login: 'admin', name: 'Ирина Белова', role: 'admin' as const, team: '', teamName: '' };
+  const nav = navFor('admin', new Set(['admin', 'approvals', 'kb', 'programs'])).map((n) => n.label);
+  for (const l of ['Стажёры', 'Сотрудники и права', 'Сервис', 'Шаблоны обучения', 'Инструкции', 'Тесты']) assert.ok(nav.includes(l), l);
+  assert.ok(!nav.includes('Согласования'));
+  assert.ok(!navFor('lead', new Set(['approvals'])).some((n) => n.view === 'approvals'));
+  assert.ok(navFor('engineer', new Set(['approvals'])).some((n) => n.view === 'approvals'));
+  const qc = seeded();
+  qc.setQueryData(keys.me, { user: admin, perms: ['admin', 'approvals', 'kb', 'programs'] });
+  qc.setQueryData(keys.service, {
+    status: { store: 'ok', kv: 'ok', corp: 'outage', llm: 'off' },
+    mode: 'offline',
+    flags: { absenceActions: true, accessActions: false, mentorEscalation: true, faqFromAnswers: true, llm: false, proactive: true },
+    toggleable: ['absenceActions', 'accessActions', 'proactive'],
+    roles: { intern: 2, lead: 2, newcomer: 1 },
+    pending: 3,
+    newcomers: 1,
+    eventsTotal: 40,
+    audit: [
+      { id: 'e1', userId: 'u-admin', userName: 'Ирина Белова', type: 'flag_changed', props: { flag: 'accessActions', enabled: false }, at: '2026-11-13T19:00:00Z' },
+      { id: 'e2', userId: 'u-maria', userName: 'Мария Волкова', type: 'approval_decided', props: { approved: false }, at: '2026-11-13T18:00:00Z' },
+    ],
+  });
+  const svc = html(<Service />, qc);
+  assert.match(svc, /База данных/);
+  assert.match(svc, /офлайн-режим/);
+  assert.match(svc, /outage/);
+  assert.match(svc, /Заявки на доступы/);
+  assert.match(svc, /Запустить ИИ-крон сейчас/);
+  assert.match(svc, /3<\/span> заявок ждут решения/);
+  assert.match(svc, /изменён флаг: Заявки на доступы — выкл\./);
+  assert.match(svc, /решение по заявке: отказ/);
+  assert.equal(eventText({ id: 'x', userId: 'u', userName: '', type: 'user_role_changed', props: { role: 'lead' }, at: '' }), 'смена роли: Руководитель');
+  assert.equal(eventText({ id: 'x', userId: 'u', userName: '', type: 'unknown_event', props: null, at: '' }), 'unknown_event');
+  const dep = html(
+    <AdminDepartment
+      d={{
+        members: [anna, oleg, { ...maria, team: 'search', teamName: 'Поиск объявлений' }, admin],
+        newcomers: [{ ...anna, id: 'u-new', name: 'Пётр Сидоров', role: 'newcomer', team: '', email: 'petr@example.com' }],
+        mentors: [oleg],
+        teams: [
+          { id: 'search', name: 'Поиск объявлений', leadId: 'u-maria', leadName: 'Мария Волкова' },
+          { id: 'platform', name: 'Платформа', leadId: '', leadName: '' },
+        ],
+      }}
+    />,
+    qc,
+  );
+  assert.match(dep, /Все сотрудники/);
+  assert.match(dep, /Платформа \(без руководителя\)/);
+  assert.match(dep, /HR BP/);
+  assert.match(dep, /Руководитель<\/option>/);
+  assert.match(dep, />Принять</);
+  assert.match(dep, /Пароль…/);
+  assert.doesNotMatch(dep, /Ирина Белова/);
+  assert.match(html(<Department />, qc), /Все сотрудники/);
+  assert.match(html(<Rights />, qc), /всех отделов/);
+  const rf = html(<RejectForm kind="absence" reason="" onReason={() => undefined} pending={false} onSubmit={() => undefined} onCancel={() => undefined} />);
+  assert.match(rf, /Причина отказа/);
+  assert.match(rf, /В эти даты релиз/);
+  assert.match(rf, /disabled=""[^>]*>Отказать/);
+  assert.doesNotMatch(html(<RejectForm kind="access" reason="Хватит чтения" onReason={() => undefined} pending={false} onSubmit={() => undefined} onCancel={() => undefined} />), /disabled=""[^>]*>Отказать/);
+  const inline = html(<InternRequests internId="u-anna" compact />);
+  assert.match(inline, /intern-requests compact/);
+  assert.match(inline, />Отказать</);
 });

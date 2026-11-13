@@ -67,7 +67,7 @@ func (a *App) ConfirmAction(ctx context.Context, s kv.Session, id string, edits 
 }
 
 func (a *App) submitCorp(ctx context.Context, s kv.Session, act domain.Action) (domain.Action, error) {
-	if (act.Kind == domain.ActionAbsence && !a.flags.AbsenceActions) || (act.Kind == domain.ActionAccess && !a.flags.AccessActions) {
+	if (act.Kind == domain.ActionAbsence && !a.ff().AbsenceActions) || (act.Kind == domain.ActionAccess && !a.ff().AccessActions) {
 		return act, ErrDisabled
 	}
 	res, err := a.corp.Call(ctx, s.Token, act.Tool, act.Args)
@@ -114,7 +114,7 @@ func (a *App) submitCorp(ctx context.Context, s kv.Session, act domain.Action) (
 }
 
 func (a *App) submitQuestion(ctx context.Context, s kv.Session, act domain.Action) (domain.Action, error) {
-	if !a.flags.MentorEscalation {
+	if !a.ff().MentorEscalation {
 		return act, ErrDisabled
 	}
 	text, _ := act.Args["question"].(string)

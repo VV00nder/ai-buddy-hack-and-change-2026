@@ -23,6 +23,7 @@
 | Права от руководителя | [011](011-delegation/spec.md) | `corp/delegation.go`, `app/rights.go`, `web/src/components/Rights.tsx` | `corp_test.go: TestDeputies`, `learning_test.go: TestApprovalDelegation` |
 | Регистрация и перевод между отделами | [012](012-accounts/spec.md) | `corp/registry.go`, `app/accounts.go`, `Login.tsx`, `Rights.tsx` | `corp_test.go: TestRegisterAndTransfer`, `accounts_test.go` |
 | Кабинет руководителя и напоминания | [013](013-lead-cabinet/spec.md) | `app/dashboard.go`, `web/src/components/Team.tsx`, `Approvals.tsx` | `dashboard_test.go: TestLeadDashboard` |
+| Администратор сервиса | [014](014-admin/spec.md) | `corp/admin.go`, `app/admin.go`, `web/src/components/Service.tsx`, `Rights.tsx` | `corp_test.go: TestAdmin`, `admin_test.go: TestAdmin` |
 | Отметка шагов из чата | [002](002-onboarding-plan/spec.md) | `agent/learning.go`, `TodayPanel.tsx` | `learning_test.go: TestChatMarksStepsAndOffersQuiz` |
 | Поведение агента | [agent](agent/agent-spec.md) | `backend/internal/agent` | `agent_test.go` (офлайн и LLM-режим) |
 

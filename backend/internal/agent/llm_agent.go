@@ -77,7 +77,7 @@ func (a *Agent) handleLLM(ctx context.Context, req Request) (Reply, error) {
 	}
 	if mcpTools, err := a.d.Corp.ListTools(ctx, req.Token); err == nil {
 		for _, t := range mcpTools {
-			if strings.HasSuffix(t.Name, "_decide") || t.Name == "delegation_set" || t.Name == "directory_transfer" || t.Name == "directory_assign" { // решения и права — только в интерфейсе руководителя
+			if strings.HasSuffix(t.Name, "_decide") || strings.HasPrefix(t.Name, "admin_") || t.Name == "delegation_set" || t.Name == "directory_transfer" || t.Name == "directory_assign" { // решения и права — только в интерфейсе руководителя
 				continue
 			}
 			tools = append(tools, llm.Tool{Type: "function", Function: llm.FunctionSpec{Name: t.Name, Description: t.Description, Parameters: t.InputSchema}})
@@ -280,4 +280,4 @@ func (a *Agent) llmStepDone(ctx context.Context, req Request, args map[string]an
 }
 
 var roleNames = map[domain.Role]string{domain.RoleIntern: "стажёр", domain.RoleMentor: "наставник", domain.RoleLead: "руководитель",
-	domain.RoleHRBP: "HR BP", domain.RoleEngineer: "сотрудник"}
+	domain.RoleHRBP: "HR BP", domain.RoleEngineer: "сотрудник", domain.RoleAdmin: "администратор сервиса", domain.RoleNewcomer: "новый сотрудник"}

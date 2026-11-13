@@ -108,7 +108,7 @@ const (
 
 // Insights считает метрики по событиям.
 func (a *App) Insights(ctx context.Context, u domain.User) (Insights, error) {
-	if u.Role != domain.RoleLead && u.Role != domain.RoleHRBP && u.Role != domain.RoleMentor {
+	if u.Role != domain.RoleLead && u.Role != domain.RoleHRBP && u.Role != domain.RoleMentor && u.Role != domain.RoleAdmin {
 		return Insights{}, ErrForbidden
 	}
 	evs, err := a.store.Events(ctx)

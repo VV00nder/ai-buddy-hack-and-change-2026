@@ -39,7 +39,7 @@ func (a *App) once(key string) bool {
 // RunReminders — один прогон ИИ-крона.
 func (a *App) RunReminders(ctx context.Context) (ReminderReport, error) {
 	var rep ReminderReport
-	if !a.flags.Proactive {
+	if !a.ff().Proactive {
 		return rep, ErrDisabled
 	}
 	rep.Reminders = a.FireReminders(ctx)
@@ -136,7 +136,7 @@ func (a *App) StartReminders(ctx context.Context, every time.Duration) {
 			}
 		}
 	}()
-	if every <= 0 || !a.flags.Proactive {
+	if every <= 0 || !a.ff().Proactive {
 		return
 	}
 	go func() {

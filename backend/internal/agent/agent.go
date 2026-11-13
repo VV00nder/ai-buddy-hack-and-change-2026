@@ -134,6 +134,14 @@ func (a *Agent) Mode() string {
 	return "offline"
 }
 
+// Model — имя языковой модели (пусто в офлайн-режиме).
+func (a *Agent) Model() string {
+	if a.d.LLM == nil {
+		return ""
+	}
+	return a.d.LLM.Model()
+}
+
 // Handle обрабатывает сообщение стажёра.
 func (a *Agent) Handle(ctx context.Context, req Request) Reply {
 	if req.Progress == nil {

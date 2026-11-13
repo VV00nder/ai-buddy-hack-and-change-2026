@@ -14,6 +14,8 @@ func canViewIntern(viewer, intern domain.User) bool {
 		return true
 	}
 	switch viewer.Role {
+	case domain.RoleAdmin:
+		return true
 	case domain.RoleMentor:
 		return intern.MentorID == viewer.ID
 	case domain.RoleLead:
@@ -72,7 +74,7 @@ func (a *App) SetStep(ctx context.Context, actor domain.User, internID, stepID s
 		if step.Quiz != "" && status == domain.StepDone {
 			return onboarding.Plan{}, invalid("Этот шаг закроется сам, когда ты сдашь тест")
 		}
-	case actor.Role == domain.RoleMentor && intern.MentorID == actor.ID, actor.Role == domain.RoleLead && intern.LeadID == actor.ID:
+	case actor.Role == domain.RoleMentor && intern.MentorID == actor.ID, actor.Role == domain.RoleLead && intern.LeadID == actor.ID, actor.Role == domain.RoleAdmin:
 	default:
 		return onboarding.Plan{}, ErrForbidden
 	}

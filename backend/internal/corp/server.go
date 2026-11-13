@@ -56,10 +56,11 @@ func simple(f func(identity.Claims, idArgs) (map[string]any, error)) mcp.Handler
 }
 
 var (
-	leads = []string{string(domain.RoleLead)}
+	leads  = []string{string(domain.RoleLead), string(domain.RoleAdmin)}
+	admins = []string{string(domain.RoleAdmin)}
 	// approvers — роли, которые могут быть согласующими доступов; конкретного согласующего проверяет сервис.
 	// Заместитель руководителя по согласованию может быть в любой роли, кроме стажёра.
-	approvers = []string{string(domain.RoleLead), string(domain.RoleMentor), string(domain.RoleEngineer), string(domain.RoleHRBP)}
+	approvers = []string{string(domain.RoleLead), string(domain.RoleMentor), string(domain.RoleEngineer), string(domain.RoleHRBP), string(domain.RoleAdmin)}
 )
 
 // MCPServer публикует корпоративные сервисы как MCP-инструменты.
@@ -160,24 +161,57 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 				}
 				return s.Transfer(c, in.UserID, in.Team)
 			}},
+		{Info: mcp.ToolInfo{Name: "admin_set_user", Title: "Роль и отдел сотрудника",
+			Description: "Администратор назначает сотруднику роль и отдел (руководитель отдела меняется вместе с ролью).",
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "role": str("Роль", "intern", "engineer", "mentor", "lead", "hrbp"),
+				"team": str("ID отдела"), "mentor_id": str("Наставник стажёра")}, "user_id", "role", "team")},
+			Roles: admins,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID   string `json:"user_id"`
+					Role     string `json:"role"`
+					Team     string `json:"team"`
+					MentorID string `json:"mentor_id"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.SetUser(c, in.UserID, in.Role, in.Team, in.MentorID)
+			}},
+		{Info: mcp.ToolInfo{Name: "admin_reset_password", Title: "Сброс пароля",
+			Description: "Администратор задаёт сотруднику новый пароль.",
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "password": str("Новый пароль")}, "user_id", "password")},
+			Roles: admins,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID   string `json:"user_id"`
+					Password string `json:"password"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.ResetPassword(c, in.UserID, in.Password)
+			}},
 		{Info: mcp.ToolInfo{Name: "directory_newcomers", Title: "Новые сотрудники", Description: "Зарегистрированные сотрудники без отдела.",
 			Annotations: map[string]any{"readOnlyHint": true}},
 			Roles:   leads,
 			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Newcomers(c) })},
 		{Info: mcp.ToolInfo{Name: "directory_assign", Title: "Принять в отдел",
 			Description: "Руководитель принимает нового сотрудника в свой отдел и назначает роль (intern, engineer, mentor).",
-			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "role": str("Роль", "intern", "engineer", "mentor"), "mentor_id": str("Наставник стажёра")}, "user_id", "role")},
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "role": str("Роль", "intern", "engineer", "mentor", "lead", "hrbp"), "mentor_id": str("Наставник стажёра"),
+				"team": str("Отдел (выбирает администратор)")}, "user_id", "role")},
 			Roles: leads,
 			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
 				in, err := decode[struct {
 					UserID   string `json:"user_id"`
 					Role     string `json:"role"`
 					MentorID string `json:"mentor_id"`
+					Team     string `json:"team"`
 				}](raw)
 				if err != nil {
 					return nil, err
 				}
-				return s.Assign(c, in.UserID, in.Role, in.MentorID)
+				return s.Assign(c, in.UserID, in.Role, in.MentorID, in.Team)
 			}},
 		{Info: mcp.ToolInfo{Name: "delegation_list", Title: "Заместители", Description: "Мои заместители по согласованию и руководители, за которых я согласую.",
 			Annotations: map[string]any{"readOnlyHint": true}},
@@ -242,7 +276,11 @@ func (s *Service) Handler(signer *identity.Signer, demoPassword, adminToken stri
 			writeJSON(w, http.StatusCreated, map[string]any{"token": signer.Issue(u, 12*time.Hour), "user": u})
 		}
 	})
-	mux.HandleFunc("GET /sso/teams", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /sso/teams", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("all") == "1" {
+			writeJSON(w, http.StatusOK, map[string]any{"teams": s.AllTeams()})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"teams": s.Teams()})
 	})
 	mux.HandleFunc("GET /sso/users", func(w http.ResponseWriter, _ *http.Request) {

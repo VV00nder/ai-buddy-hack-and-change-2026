@@ -69,6 +69,7 @@ type App struct {
 	agent       *agent.Agent
 	hub         *events.Hub
 	flags       flags.Flags
+	flagsMu     sync.RWMutex
 	now         func() time.Time
 	log         *slog.Logger
 	http        *http.Client
@@ -140,7 +141,7 @@ func New(cfg Config, d Deps) *App {
 func (a *App) Hub() *events.Hub { return a.hub }
 
 // Flags возвращает флаги.
-func (a *App) Flags() flags.Flags { return a.flags }
+func (a *App) Flags() flags.Flags { return a.ff() }
 
 // Mode — режим агента (llm | offline).
 func (a *App) Mode() string { return a.agent.Mode() }

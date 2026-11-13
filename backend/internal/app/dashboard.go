@@ -107,7 +107,7 @@ func (a *App) Dashboard(ctx context.Context, s kv.Session) (Dashboard, error) {
 	if rs, err := a.Reminders(ctx, u); err == nil {
 		d.Reminders = rs
 	}
-	if u.Role == domain.RoleLead {
+	if u.Role == domain.RoleLead || u.Role == domain.RoleAdmin {
 		if users, err := a.DemoUsers(ctx); err == nil {
 			for _, x := range users {
 				if x.Role == domain.RoleNewcomer {
@@ -137,6 +137,8 @@ type InternRequest struct {
 	CreatedAt  time.Time           `json:"createdAt"`
 	// AwaitingMe — решение по заявке ждёт текущего пользователя.
 	AwaitingMe bool `json:"awaitingMe"`
+	// Approval — данные для решения прямо в карточке (если ждёт текущего пользователя).
+	Approval *Approval `json:"approval,omitempty"`
 }
 
 // InternRequests — какие заявки отправлял стажёр и какие ещё не согласованы.
@@ -152,11 +154,12 @@ func (a *App) InternRequests(ctx context.Context, s kv.Session, internID string)
 	if err != nil {
 		return nil, err
 	}
-	mine := map[string]bool{}
+	mine := map[string]Approval{}
 	if canApprove(s.User) {
 		if ap, err := a.Approvals(ctx, s); err == nil {
 			for _, x := range ap {
-				mine[x.ExternalID] = true
+				x.WaitingHours = waitingHours(x.Details, a.now())
+				mine[x.ExternalID] = x
 			}
 		}
 	}
@@ -166,8 +169,12 @@ func (a *App) InternRequests(ctx context.Context, s kv.Session, internID string)
 		if ac.Status == domain.ActionProposed || ac.Status == domain.ActionCancelled || ac.Kind == domain.ActionMentorQuestion {
 			continue
 		}
-		out = append(out, InternRequest{ID: ac.ID, Kind: ac.Kind, Title: ac.Title, Status: ac.Status, ExternalID: ac.ExternalID,
-			Comment: comment(ac), CreatedAt: ac.CreatedAt, AwaitingMe: ac.ExternalID != "" && mine[ac.ExternalID]})
+		r := InternRequest{ID: ac.ID, Kind: ac.Kind, Title: ac.Title, Status: ac.Status, ExternalID: ac.ExternalID,
+			Comment: comment(ac), CreatedAt: ac.CreatedAt}
+		if ap, ok := mine[ac.ExternalID]; ok && ac.ExternalID != "" {
+			r.AwaitingMe, r.Approval = true, &ap
+		}
+		out = append(out, r)
 	}
 	return out, nil
 }

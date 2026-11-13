@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { InternCard, InternRequest, Reminder } from '../api/schemas';
 import { keys } from '../hooks/queries';
@@ -39,6 +39,9 @@ export function Team() {
   if (q.isError) return <p className="error">{q.error.message}</p>;
   const d = q.data;
   const behind = d.interns.filter((i) => i.overdue > 0).length;
+  // заявки стажёров — внутри строки стажёра; здесь только заявки остальных сотрудников (если есть)
+  const internIds = new Set(d.interns.map((i) => i.user.id));
+  const others = d.approvals.filter((a) => !internIds.has(a.userId));
   return (
     <div className="cabinet">
       <ul className="cab-kpis" aria-label="Сводка">
@@ -86,10 +89,10 @@ export function Team() {
         )}
       </section>
       <aside className="cab-side">
-        {d.approvals.length > 0 && (
+        {others.length > 0 && (
           <section aria-labelledby="cab-approvals">
-            <h3 id="cab-approvals" className="section-title">Ждут вашего решения</h3>
-            {d.approvals.map((a) => (
+            <h3 id="cab-approvals" className="section-title">Заявки сотрудников</h3>
+            {others.map((a) => (
               <ApprovalRow key={a.externalId} a={a} compact />
             ))}
           </section>
@@ -102,62 +105,86 @@ export function Team() {
 
 function InternRow({ i, onOpen }: { i: InternCard; onOpen: () => void }) {
   const late = i.overdue > 0;
+  // заявки стажёра раскрываются прямо в таблице — решение без перехода в карточку
+  // заявки, ждущие решения, раскрыты сразу — согласовать или отказать можно без лишнего клика
+  const [open, setOpen] = useState(i.pendingApprovals > 0);
+  useEffect(() => {
+    if (i.pendingApprovals > 0) setOpen(true); // новая заявка пришла, пока страница открыта
+  }, [i.pendingApprovals]);
   return (
-    <tr className={late ? 'row-late' : ''} onClick={onOpen}>
-      <td>
-        <div className="person-wrap">
-          <button className="person" onClick={onOpen} aria-describedby={`sum-${i.user.id}`}>
-            <span className="avatar role-intern" aria-hidden="true">{initials(i.user.name)}</span>
-            <span>
-              {i.user.name}
-              {late && <span className="late-mark" title={`Просрочено шагов: ${i.overdue}`}> просрочка</span>}
-              <br />
-              <span className="muted small">{i.templateName || i.user.teamName}</span>
-            </span>
+    <>
+      <tr className={`${late ? 'row-late' : ''} ${open ? 'row-open' : ''}`} onClick={onOpen}>
+        <td>
+          <div className="person-wrap">
+            <button className="person" onClick={onOpen} aria-describedby={`sum-${i.user.id}`}>
+              <span className="avatar role-intern" aria-hidden="true">{initials(i.user.name)}</span>
+              <span>
+                {i.user.name}
+                {late && <span className="late-mark" title={`Просрочено шагов: ${i.overdue}`}> просрочка</span>}
+                <br />
+                <span className="muted small">{i.templateName || i.user.teamName}</span>
+              </span>
+            </button>
+            <InternSummaryPop i={i} />
+          </div>
+          {i.alerts.length > 0 && (
+            <ul className="row-alerts">
+              {i.alerts.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          )}
+        </td>
+        <td className="num">{i.day}</td>
+        <td>
+          <div className="progress-line">
+            <div className="progress" aria-label={`${i.percent}%`}><span style={{ width: `${i.percent}%` }} /></div>
+            <span className="small num pct">{i.percent}%</span>
+          </div>
+          <span className="small">
+            {i.done}/{i.total}
+            {late && <span className="overdue-text">, просрочено {i.overdue}</span>}
+          </span>
+        </td>
+        <td className="small">{i.goalsTotal > 0 ? `${i.goalsDone} из ${i.goalsTotal}` : <span className="overdue-text">нет целей</span>}</td>
+        <td className="small">
+          {i.quizzesPassed + i.quizzesFailed === 0 ? (
+            <span className="muted">—</span>
+          ) : (
+            <>
+              {i.quizzesPassed} сдано
+              {i.quizzesFailed > 0 && <span className="overdue-text">, {i.quizzesFailed} нет</span>}
+            </>
+          )}
+        </td>
+        <td className="small">
+          <button
+            className={`req-toggle ${i.pendingApprovals > 0 ? (i.waitingHours >= 24 ? 'tag overdue-tag' : 'tag') : 'link small'}`}
+            aria-expanded={open}
+            aria-controls={`req-${i.user.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(!open);
+            }}
+          >
+            {i.pendingApprovals > 0
+              ? `${i.pendingApprovals} ждут вас · ${waited(i.waitingHours)}`
+              : i.openRequests > 0
+                ? `${i.openRequests} на согласовании`
+                : 'история'}
+            <span aria-hidden="true"> {open ? '▴' : '▾'}</span>
           </button>
-          <InternSummaryPop i={i} />
-        </div>
-        {i.alerts.length > 0 && (
-          <ul className="row-alerts">
-            {i.alerts.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        )}
-      </td>
-      <td className="num">{i.day}</td>
-      <td>
-        <div className="progress-line">
-          <div className="progress" aria-label={`${i.percent}%`}><span style={{ width: `${i.percent}%` }} /></div>
-          <span className="small num pct">{i.percent}%</span>
-        </div>
-        <span className="small">
-          {i.done}/{i.total}
-          {late && <span className="overdue-text">, просрочено {i.overdue}</span>}
-        </span>
-      </td>
-      <td className="small">{i.goalsTotal > 0 ? `${i.goalsDone} из ${i.goalsTotal}` : <span className="overdue-text">нет целей</span>}</td>
-      <td className="small">
-        {i.quizzesPassed + i.quizzesFailed === 0 ? (
-          <span className="muted">—</span>
-        ) : (
-          <>
-            {i.quizzesPassed} сдано
-            {i.quizzesFailed > 0 && <span className="overdue-text">, {i.quizzesFailed} нет</span>}
-          </>
-        )}
-      </td>
-      <td className="small">
-        {i.pendingApprovals > 0 ? (
-          <span className={i.waitingHours >= 24 ? 'tag overdue-tag' : 'tag'}>{i.pendingApprovals} ждут вас · {waited(i.waitingHours)}</span>
-        ) : i.openRequests > 0 ? (
-          <span className="muted">{i.openRequests} на согласовании</span>
-        ) : (
-          <span className="muted">—</span>
-        )}
-      </td>
-      <td className="small">{i.nextStep ?? 'Всё выполнено'}</td>
-    </tr>
+        </td>
+        <td className="small">{i.nextStep ?? 'Всё выполнено'}</td>
+      </tr>
+      {open && (
+        <tr className="row-expand" id={`req-${i.user.id}`}>
+          <td colSpan={7}>
+            <InternRequests internId={i.user.id} compact />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -201,16 +228,16 @@ const reqStatus: Record<InternRequest['status'], string> = {
 };
 
 /** Что стажёр просил согласовать: открытые заявки сверху, свои — с отметкой «ждёт вас». */
-export function InternRequests({ internId }: { internId: string }) {
+export function InternRequests({ internId, compact = false }: { internId: string; compact?: boolean }) {
   const q = useQuery({ queryKey: keys.internRequests(internId), queryFn: () => api.internRequests(internId) });
   if (q.isPending) return null;
   if (q.isError) return <p className="error small">Заявки не загрузились: {q.error.message}</p>;
   const list = [...q.data.requests].sort((a, b) => Number(b.status === 'submitted') - Number(a.status === 'submitted'));
   const open = list.filter((r) => r.status === 'submitted').length;
   return (
-    <section className="intern-requests" aria-labelledby="ir-title">
+    <section className={`intern-requests ${compact ? 'compact' : ''}`} aria-labelledby={`ir-title-${internId}`}>
       <div className="row">
-        <h3 id="ir-title">Заявки стажёра</h3>
+        <h3 id={`ir-title-${internId}`}>Заявки стажёра</h3>
         <span className="small muted">
           {open > 0 ? `${open} не согласовано` : 'все решены'} · всего {list.length}
         </span>
@@ -219,17 +246,23 @@ export function InternRequests({ internId }: { internId: string }) {
       <ul className="req-list">
         {list.map((r) => (
           <li key={r.id} className={`req req-${r.status} ${r.awaitingMe ? 'req-mine' : ''}`}>
-            <span className="req-title">{r.title}</span>
-            <span className={`stamp stamp-${r.status}`}>{r.awaitingMe ? 'ждёт вашего решения' : reqStatus[r.status]}</span>
-            <span className="small muted">
-              {dayMonth(r.createdAt)}, {time(r.createdAt)}
-              {r.externalId && ` · ${r.externalId}`}
-            </span>
-            {r.comment && <span className="small">«{r.comment}»</span>}
+            {r.approval ? (
+              // заявка ждёт решения текущего пользователя — согласовать или отказать прямо здесь
+              <ApprovalRow a={r.approval} compact />
+            ) : (
+              <>
+                <span className="req-title">{r.title}</span>
+                <span className={`stamp stamp-${r.status}`}>{r.awaitingMe ? 'ждёт вашего решения' : reqStatus[r.status]}</span>
+                <span className="small muted">
+                  {dayMonth(r.createdAt)}, {time(r.createdAt)}
+                  {r.externalId && ` · ${r.externalId}`}
+                </span>
+                {r.comment && <span className="small">«{r.comment}»</span>}
+              </>
+            )}
           </li>
         ))}
       </ul>
-      {list.some((r) => r.awaitingMe) && <p className="small muted">Решение по заявкам, которые ждут вас, — в блоке «Ждут вашего решения» на странице «Стажёры» или в «Согласованиях».</p>}
     </section>
   );
 }

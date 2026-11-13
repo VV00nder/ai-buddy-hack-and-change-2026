@@ -62,7 +62,7 @@ func (a *App) LoadKB(ctx context.Context) error {
 
 // CanEditDoc — можно ли пользователю править документ.
 func (a *App) CanEditDoc(ctx context.Context, u domain.User, d *knowledge.Doc) bool {
-	return d.Custom && d.Team == u.Team && a.canEditKB(ctx, u)
+	return d.Custom && sameTeam(u, d.Team) && a.canEditKB(ctx, u)
 }
 
 var validAudience = []string{"all", string(domain.RoleIntern), string(domain.RoleMentor), string(domain.RoleLead), string(domain.RoleHRBP), string(domain.RoleEngineer)}
@@ -123,6 +123,7 @@ func (a *App) SaveDoc(ctx context.Context, u domain.User, id string, in DocInput
 	if err != nil {
 		return nil, err
 	}
+	team := contentTeam(u)
 	if id == "" {
 		id = newID("doc")
 	} else {
@@ -132,11 +133,12 @@ func (a *App) SaveDoc(ctx context.Context, u domain.User, id string, in DocInput
 			return nil, ErrNotFound
 		case !cur.Custom:
 			return nil, invalid("Встроенную инструкцию нельзя изменить — создайте новую")
-		case cur.Team != u.Team:
+		case !sameTeam(u, cur.Team):
 			return nil, ErrForbidden
 		}
+		team = cur.Team // правка не переносит инструкцию в другой отдел
 	}
-	rec := KBDoc{ID: id, Title: in.Title, Folder: in.Folder, Audience: in.Audience, Team: u.Team, Tags: in.Tags, Body: in.Body,
+	rec := KBDoc{ID: id, Title: in.Title, Folder: in.Folder, Audience: in.Audience, Team: team, Tags: in.Tags, Body: in.Body,
 		UpdatedBy: u.Name, UpdatedAt: a.now().Format(time.RFC3339)}
 	if err := putRec(ctx, a.store, recKBDoc, id, rec); err != nil {
 		return nil, err
@@ -185,7 +187,7 @@ func (a *App) Folders(ctx context.Context, u domain.User) ([]string, error) {
 		return nil, err
 	}
 	for _, f := range fs {
-		if f.Team == u.Team {
+		if f.Team == u.Team || f.Team == "all" || isAdmin(u) {
 			add(f.Path)
 		}
 	}
@@ -209,7 +211,7 @@ func (a *App) CreateFolder(ctx context.Context, u domain.User, path string) ([]s
 	if err := checkFolder(path); err != nil {
 		return nil, err
 	}
-	if err := putRec(ctx, a.store, recKBFolder, u.Team+"|"+path, KBFolder{Path: path, Team: u.Team}); err != nil {
+	if err := putRec(ctx, a.store, recKBFolder, contentTeam(u)+"|"+path, KBFolder{Path: path, Team: contentTeam(u)}); err != nil {
 		return nil, err
 	}
 	return a.Folders(ctx, u)
@@ -231,7 +233,7 @@ func (a *App) DeleteFolder(ctx context.Context, u domain.User, path string) ([]s
 		return nil, err
 	}
 	for _, f := range fs {
-		if f.Team == u.Team && (f.Path == path || strings.HasPrefix(f.Path, path+"/")) {
+		if sameTeam(u, f.Team) && (f.Path == path || strings.HasPrefix(f.Path, path+"/")) {
 			if err := a.store.DeleteRecord(ctx, recKBFolder, f.Team+"|"+f.Path); err != nil {
 				return nil, err
 			}

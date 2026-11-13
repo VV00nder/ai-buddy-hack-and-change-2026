@@ -319,6 +319,9 @@ func (b *Base) Filter(query string, u domain.User) []*Doc {
 
 // CanRead проверяет право пользователя на документ.
 func CanRead(d *Doc, u domain.User) bool {
+	if u.Role == domain.RoleAdmin { // администратор сервиса видит все инструкции
+		return true
+	}
 	if d.Team != "all" && d.Team != u.Team {
 		return false
 	}

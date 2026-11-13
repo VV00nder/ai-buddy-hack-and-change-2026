@@ -131,6 +131,11 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/rights", s.rights)
 	auth("POST /api/rights", s.rightSet)
 	auth("GET /api/events", s.events)
+	auth("GET /api/admin/service", s.adminService)
+	auth("PUT /api/admin/flags/{name}", s.adminFlag)
+	auth("POST /api/admin/cron", s.adminCron)
+	auth("PATCH /api/admin/users/{user}", s.adminSetUser)
+	auth("POST /api/admin/users/{user}/password", s.adminPassword)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeErr(w, 404, "not_found", "Метод не найден")
 	})
@@ -369,11 +374,12 @@ func (s *Server) assignNewcomer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Role     string `json:"role"`
 		MentorID string `json:"mentorId"`
+		Team     string `json:"team"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	d, err := s.app.AssignNewcomer(r.Context(), sessionFrom(r), r.PathValue("user"), in.Role, in.MentorID)
+	d, err := s.app.AssignNewcomer(r.Context(), sessionFrom(r), r.PathValue("user"), in.Role, in.MentorID, in.Team)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -1105,4 +1111,70 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, index)
+}
+
+// --- Администрирование ---
+
+func (s *Server) adminService(w http.ResponseWriter, r *http.Request) {
+	out, err := s.app.ServiceInfo(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s *Server) adminFlag(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	f, err := s.app.SetFlag(r.Context(), sessionFrom(r), r.PathValue("name"), in.Enabled)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"flags": f})
+}
+
+func (s *Server) adminCron(w http.ResponseWriter, r *http.Request) {
+	rep, err := s.app.RunCronNow(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, rep)
+}
+
+func (s *Server) adminSetUser(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Role     string `json:"role"`
+		Team     string `json:"team"`
+		MentorID string `json:"mentorId"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	d, err := s.app.SetUser(r.Context(), sessionFrom(r), r.PathValue("user"), in.Role, in.Team, in.MentorID)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, d)
+}
+
+func (s *Server) adminPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.app.ResetPassword(r.Context(), sessionFrom(r), r.PathValue("user"), in.Password); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }

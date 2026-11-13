@@ -208,7 +208,7 @@ func (s *Service) Users() []domain.User {
 }
 
 // loginOrder — порядок учётных записей на экране входа.
-var loginOrder = []string{"anna", "ivan", "oleg", "maria", "pavel", "dmitry", "sergey", "elena"}
+var loginOrder = []string{"anna", "ivan", "oleg", "maria", "pavel", "dmitry", "sergey", "elena", "admin"}
 
 func (s *Service) nextID(prefix string) string {
 	s.seq++

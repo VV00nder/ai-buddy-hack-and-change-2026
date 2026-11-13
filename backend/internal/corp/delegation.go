@@ -11,7 +11,7 @@ import (
 // mayDecide — решение принимает сам согласующий или его заместитель.
 // Вызывается под s.mu.
 func (s *Service) mayDecide(approverID, sub string) bool {
-	return approverID == sub || s.deputies[approverID][sub]
+	return approverID == sub || s.deputies[approverID][sub] || s.isAdmin(sub)
 }
 
 // SetDeputy — руководитель доверяет (или забирает) согласование своих заявок
@@ -23,8 +23,15 @@ func (s *Service) SetDeputy(c identity.Claims, userID string, enabled bool) (map
 		return nil, errOutage
 	}
 	lead, ok := s.users[c.Sub]
-	if !ok || lead.Role != domain.RoleLead {
+	if !ok || (lead.Role != domain.RoleLead && lead.Role != domain.RoleAdmin) {
 		return nil, mcp.ErrForbidden
+	}
+	if lead.Role == domain.RoleAdmin { // администратор назначает заместителя руководителю отдела сотрудника
+		u, ok := s.users[userID]
+		if !ok || s.users[u.LeadID] == nil {
+			return nil, mcp.NewToolError("not_found", "У сотрудника нет руководителя")
+		}
+		lead = s.users[u.LeadID]
 	}
 	u, ok := s.users[userID]
 	if !ok || u.ID == lead.ID {
@@ -55,6 +62,15 @@ func (s *Service) Deputies(c identity.Claims) (map[string]any, error) {
 		return nil, errOutage
 	}
 	out := s.deputiesOf(c.Sub)
+	if s.isAdmin(c.Sub) { // администратор видит заместителей всех руководителей
+		all := []map[string]any{}
+		for _, id := range s.sortedIDs() {
+			if p := s.users[id]; p.Role == domain.RoleLead {
+				all = append(all, asItems(s.deputiesOf(p.ID)["deputies"])...)
+			}
+		}
+		out["deputies"] = all
+	}
 	var for_ []map[string]any
 	for lead, ds := range s.deputies {
 		if ds[c.Sub] {
@@ -75,4 +91,9 @@ func (s *Service) deputiesOf(leadID string) map[string]any {
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["id"].(string) < items[j]["id"].(string) })
 	return map[string]any{"deputies": items}
+}
+
+func asItems(v any) []map[string]any {
+	l, _ := v.([]map[string]any)
+	return l
 }

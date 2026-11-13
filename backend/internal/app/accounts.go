@@ -34,7 +34,16 @@ type RegisterInput struct {
 
 // Teams — отделы с руководителями (для регистрации и перевода).
 func (a *App) Teams(ctx context.Context) ([]TeamInfo, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, a.cfg.CorpBaseURL+"/sso/teams", nil)
+	return a.teams(ctx, false)
+}
+
+// teams — отделы; all — в том числе без руководителя.
+func (a *App) teams(ctx context.Context, all bool) ([]TeamInfo, error) {
+	url := a.cfg.CorpBaseURL + "/sso/teams"
+	if all {
+		url += "?all=1"
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := a.http.Do(req)
 	if err != nil {
 		return nil, ErrUnavailable
@@ -84,7 +93,7 @@ func (a *App) Register(ctx context.Context, in RegisterInput, client string) (st
 	a.notify(ctx, out.User.ID, "welcome", "Учётная запись создана. Руководитель примет вас в отдел и назначит роль — после этого откроются план и инструменты.", "/")
 	if users, err := a.DemoUsers(ctx); err == nil {
 		for _, u := range users {
-			if u.Role == domain.RoleLead {
+			if u.Role == domain.RoleLead || u.Role == domain.RoleAdmin {
 				a.notify(ctx, u.ID, "team", fmt.Sprintf("Новый сотрудник ждёт назначения в отдел: %s (%s)", out.User.Name, out.User.Email), "/rights")
 			}
 		}
@@ -104,6 +113,8 @@ func roleRu(r domain.Role) string {
 		return "HR BP"
 	case domain.RoleNewcomer:
 		return "ожидает назначения"
+	case domain.RoleAdmin:
+		return "администратор"
 	}
 	return "сотрудник"
 }
@@ -117,22 +128,22 @@ type Department struct {
 	Mentors   []domain.User `json:"mentors"`
 }
 
-// MyDepartment — сотрудники отдела (видит руководитель).
+// MyDepartment — сотрудники отдела (видит руководитель; администратор — всех сотрудников).
 func (a *App) MyDepartment(ctx context.Context, s kv.Session) (Department, error) {
-	if s.User.Role != domain.RoleLead {
+	if s.User.Role != domain.RoleLead && !isAdmin(s.User) {
 		return Department{}, ErrForbidden
 	}
 	users, err := a.DemoUsers(ctx)
 	if err != nil {
 		return Department{}, err
 	}
-	teams, err := a.Teams(ctx)
+	teams, err := a.teams(ctx, isAdmin(s.User))
 	if err != nil {
 		return Department{}, err
 	}
 	d := Department{Members: []domain.User{}, Teams: teams, Newcomers: []domain.User{}, Mentors: []domain.User{}}
 	for _, u := range users {
-		if u.Team == s.User.Team && u.ID != s.User.ID {
+		if u.Role != domain.RoleNewcomer && sameTeam(s.User, u.Team) && u.ID != s.User.ID {
 			d.Members = append(d.Members, u)
 			if u.Role == domain.RoleMentor {
 				d.Mentors = append(d.Mentors, u)
@@ -148,7 +159,7 @@ func (a *App) MyDepartment(ctx context.Context, s kv.Session) (Department, error
 // Transfer — руководитель переводит сотрудника своего отдела в другой отдел
 // с привязкой к руководителю нового отдела.
 func (a *App) Transfer(ctx context.Context, s kv.Session, userID, team string) (Department, error) {
-	if s.User.Role != domain.RoleLead {
+	if s.User.Role != domain.RoleLead && !isAdmin(s.User) {
 		return Department{}, ErrForbidden
 	}
 	res, err := a.corp.Call(ctx, s.Token, "directory_transfer", map[string]any{"user_id": userID, "team": team})
@@ -188,11 +199,12 @@ func (a *App) Transfer(ctx context.Context, s kv.Session, userID, team string) (
 }
 
 // AssignNewcomer — руководитель принимает нового сотрудника в свой отдел и назначает роль.
-func (a *App) AssignNewcomer(ctx context.Context, s kv.Session, userID, role, mentorID string) (Department, error) {
-	if s.User.Role != domain.RoleLead {
+// Администратор выбирает и отдел (team), руководитель принимает только в свой.
+func (a *App) AssignNewcomer(ctx context.Context, s kv.Session, userID, role, mentorID, team string) (Department, error) {
+	if s.User.Role != domain.RoleLead && !isAdmin(s.User) {
 		return Department{}, ErrForbidden
 	}
-	res, err := a.corp.Call(ctx, s.Token, "directory_assign", map[string]any{"user_id": userID, "role": role, "mentor_id": mentorID})
+	res, err := a.corp.Call(ctx, s.Token, "directory_assign", map[string]any{"user_id": userID, "role": role, "mentor_id": mentorID, "team": team})
 	var ce *mcp.CallError
 	if errors.As(err, &ce) {
 		if ce.Code == "forbidden" {
@@ -216,4 +228,62 @@ func (a *App) AssignNewcomer(ctx context.Context, s kv.Session, userID, role, me
 	a.notify(ctx, u.ID, "team", msg, "/")
 	a.Track(ctx, s.User.ID, "newcomer_assigned", map[string]any{"user": u.ID, "role": u.Role})
 	return a.MyDepartment(ctx, s)
+}
+
+// SetUser — администратор назначает сотруднику роль и отдел.
+func (a *App) SetUser(ctx context.Context, s kv.Session, userID, role, team, mentorID string) (Department, error) {
+	if !isAdmin(s.User) {
+		return Department{}, ErrForbidden
+	}
+	before, _ := a.userByID(ctx, userID)
+	res, err := a.corp.Call(ctx, s.Token, "admin_set_user", map[string]any{"user_id": userID, "role": role, "team": team, "mentor_id": mentorID})
+	var ce *mcp.CallError
+	if errors.As(err, &ce) {
+		if ce.Code == "forbidden" {
+			return Department{}, ErrForbidden
+		}
+		return Department{}, invalid("%s", ce.Message)
+	}
+	if err != nil {
+		return Department{}, ErrUnavailable
+	}
+	a.invalidateUsers()
+	u, ok := a.userByID(ctx, userID)
+	if !ok {
+		return Department{}, ErrNotFound
+	}
+	msg := fmt.Sprintf("%s назначил(а) вам роль «%s» в отделе «%s»", s.User.Name, roleRu(u.Role), u.TeamName)
+	if l, ok := res["lead"].(map[string]any); ok && u.Role != domain.RoleLead {
+		msg += fmt.Sprintf(", руководитель — %v", l["name"])
+	}
+	if m, ok := res["mentor"].(map[string]any); ok {
+		msg += fmt.Sprintf(", наставник — %v", m["name"])
+	}
+	a.notify(ctx, u.ID, "team", msg, "/")
+	a.Track(ctx, s.User.ID, "user_role_changed", map[string]any{"user": u.ID, "from": before.Role, "role": u.Role, "team": u.Team})
+	if u.Role == domain.RoleIntern {
+		a.publishPlan(ctx, u)
+	}
+	return a.MyDepartment(ctx, s)
+}
+
+// ResetPassword — администратор задаёт сотруднику новый пароль.
+func (a *App) ResetPassword(ctx context.Context, s kv.Session, userID, password string) error {
+	if !isAdmin(s.User) {
+		return ErrForbidden
+	}
+	_, err := a.corp.Call(ctx, s.Token, "admin_reset_password", map[string]any{"user_id": userID, "password": password})
+	var ce *mcp.CallError
+	if errors.As(err, &ce) {
+		if ce.Code == "forbidden" {
+			return ErrForbidden
+		}
+		return invalid("%s", ce.Message)
+	}
+	if err != nil {
+		return ErrUnavailable
+	}
+	a.notify(ctx, userID, "team", "Администратор задал вам новый пароль — используйте его при следующем входе", "/")
+	a.Track(ctx, s.User.ID, "password_reset", map[string]any{"user": userID})
+	return nil
 }

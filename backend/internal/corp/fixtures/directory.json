@@ -103,6 +103,15 @@
       "team": "platform",
       "startOffsetDays": -1100,
       "handle": "@pavel-devops"
+    },
+    {
+      "id": "u-admin",
+      "login": "admin",
+      "name": "Ирина Белова",
+      "role": "admin",
+      "team": "",
+      "startOffsetDays": -2200,
+      "handle": "@irina-admin"
     }
   ],
   "absenceBalance": {

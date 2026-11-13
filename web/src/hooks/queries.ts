@@ -30,6 +30,7 @@ export const keys = {
   goals: (internId = '') => ['goals', internId] as const,
   doc: (id: string) => ['doc', id] as const,
   dashboard: ['dashboard'] as const,
+  service: ['service'] as const,
   internRequests: (id: string) => ['internRequests', id] as const,
 };
 

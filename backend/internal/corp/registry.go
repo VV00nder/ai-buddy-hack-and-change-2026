@@ -92,14 +92,23 @@ func (s *Service) sortedIDs() []string {
 func (s *Service) Teams() []TeamInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.teamsLocked()
+	return s.teamsLocked(false)
 }
 
-func (s *Service) teamsLocked() []TeamInfo {
+// AllTeams — все отделы, в том числе без руководителя (для администратора).
+func (s *Service) AllTeams() []TeamInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.teamsLocked(true)
+}
+
+func (s *Service) teamsLocked(all bool) []TeamInfo {
 	out := []TeamInfo{}
 	for _, t := range s.teams {
 		if l := s.leadOf(t.ID); l != nil {
 			out = append(out, TeamInfo{ID: t.ID, Name: t.Name, LeadID: l.ID, LeadName: l.Name})
+		} else if all {
+			out = append(out, TeamInfo{ID: t.ID, Name: t.Name})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -179,20 +188,21 @@ func (s *Service) Transfer(c identity.Claims, userID, teamID string) (map[string
 	if s.outage {
 		return nil, errOutage
 	}
-	lead, ok := s.users[c.Sub]
-	if !ok || lead.Role != domain.RoleLead {
+	lead, ok := s.manager(c)
+	if !ok {
 		return nil, mcp.ErrForbidden
 	}
+	admin := lead.Role == domain.RoleAdmin
 	p, ok := s.users[userID]
 	switch {
 	case !ok:
 		return nil, mcp.NewToolError("not_found", "Сотрудник не найден")
 	case p.ID == lead.ID:
 		return nil, mcp.NewToolError("self", "Нельзя перевести самого себя")
-	case p.Team != lead.Team:
+	case p.Team != lead.Team && !admin:
 		return nil, mcp.NewToolError("other_team", "Переводить можно только сотрудников своего отдела")
-	case p.Role == domain.RoleLead:
-		return nil, mcp.NewToolError("not_allowed_for_role", "Руководителя отдела переводит кадровая служба")
+	case p.Role == domain.RoleLead || p.Role == domain.RoleAdmin || p.Role == domain.RoleNewcomer:
+		return nil, mcp.NewToolError("not_allowed_for_role", "Руководителя отдела переводит администратор, назначив ему другую роль; нового сотрудника — принимают в отдел")
 	case teamID == p.Team:
 		return nil, mcp.NewToolError("same_team", "Сотрудник уже работает в этом отделе")
 	}
@@ -271,7 +281,7 @@ func (s *Service) UseStateFile(path string) error {
 	for i := range st.Users {
 		saved := st.Users[i]
 		if cur, ok := s.users[saved.ID]; ok { // тестовый сотрудник: применяем перевод
-			cur.Team, cur.TeamName, cur.LeadID, cur.MentorID = saved.Team, saved.TeamName, saved.LeadID, saved.MentorID
+			cur.Role, cur.Team, cur.TeamName, cur.LeadID, cur.MentorID = saved.Role, saved.Team, saved.TeamName, saved.LeadID, saved.MentorID
 			continue
 		}
 		p := saved
@@ -313,7 +323,7 @@ func (s *Service) Newcomers(c identity.Claims) (map[string]any, error) {
 	if s.outage {
 		return nil, errOutage
 	}
-	if lead, ok := s.users[c.Sub]; !ok || lead.Role != domain.RoleLead {
+	if _, ok := s.manager(c); !ok {
 		return nil, mcp.ErrForbidden
 	}
 	out := []domain.User{}
@@ -327,8 +337,22 @@ func (s *Service) Newcomers(c identity.Claims) (map[string]any, error) {
 
 // Assign — руководитель принимает нового сотрудника в свой отдел и назначает роль.
 // Стажёру назначается наставник: выбранный руководителем или первый наставник отдела.
-func (s *Service) Assign(c identity.Claims, userID, role, mentorID string) (map[string]any, error) {
+func (s *Service) Assign(c identity.Claims, userID, role, mentorID, teamID string) (map[string]any, error) {
 	s.mu.Lock()
+	if s.isAdmin(c.Sub) { // администратор принимает в любой отдел и назначает любую роль
+		s.mu.Unlock()
+		if teamID == "" {
+			return nil, mcp.NewToolError("bad_team", "Выберите отдел")
+		}
+		s.mu.Lock()
+		p, ok := s.users[userID]
+		newcomer := ok && p.Role == domain.RoleNewcomer
+		s.mu.Unlock()
+		if !newcomer {
+			return nil, mcp.NewToolError("already_assigned", "Сотрудник уже работает в отделе — используйте перевод")
+		}
+		return s.SetUser(c, userID, role, teamID, mentorID)
+	}
 	defer s.mu.Unlock()
 	if s.outage {
 		return nil, errOutage

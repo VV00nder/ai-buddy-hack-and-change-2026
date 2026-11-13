@@ -2,7 +2,7 @@
 // от неожиданного ответа сервера.
 import { z } from 'zod';
 
-export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'engineer', 'newcomer']);
+export const Role = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'engineer', 'newcomer', 'admin']);
 export type Role = z.infer<typeof Role>;
 
 export const User = z.object({
@@ -21,7 +21,7 @@ export const User = z.object({
 });
 export type User = z.infer<typeof User>;
 
-export const TeamInfo = z.object({ id: z.string(), name: z.string(), leadId: z.string(), leadName: z.string() });
+export const TeamInfo = z.object({ id: z.string(), name: z.string(), leadId: z.string().optional().default(''), leadName: z.string().optional().default('') });
 export type TeamInfo = z.infer<typeof TeamInfo>;
 export const Department = z.object({
   members: z.array(User),
@@ -412,5 +412,48 @@ export const InternRequest = z.object({
   comment: z.string().optional(),
   createdAt: z.string(),
   awaitingMe: z.boolean(),
+  approval: Approval.nullish(),
 });
 export type InternRequest = z.infer<typeof InternRequest>;
+
+export const Flags = z.object({
+  absenceActions: z.boolean(),
+  accessActions: z.boolean(),
+  mentorEscalation: z.boolean(),
+  faqFromAnswers: z.boolean(),
+  llm: z.boolean(),
+  proactive: z.boolean().optional().default(true),
+});
+export type Flags = z.infer<typeof Flags>;
+
+export const AuditEntry = z.object({
+  id: z.string(),
+  userId: z.string(),
+  userName: z.string().optional().default(''),
+  type: z.string(),
+  props: Dict.nullish(),
+  at: z.string(),
+});
+export type AuditEntry = z.infer<typeof AuditEntry>;
+
+export const ServiceInfo = z.object({
+  status: z.record(z.string(), z.string()),
+  mode: z.string(),
+  model: z.string().optional(),
+  flags: Flags,
+  toggleable: z.array(z.string()).nullish().transform((v) => v ?? []),
+  roles: z.record(z.string(), z.number()),
+  pending: z.number(),
+  newcomers: z.number(),
+  eventsTotal: z.number(),
+  audit: z.array(AuditEntry).nullish().transform((v) => v ?? []),
+});
+export type ServiceInfo = z.infer<typeof ServiceInfo>;
+
+export const CronReport = z.object({
+  digests: z.number(),
+  staleRequests: z.number(),
+  openQuestions: z.number(),
+  reminders: z.number(),
+});
+export type CronReport = z.infer<typeof CronReport>;

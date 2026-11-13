@@ -202,7 +202,7 @@ func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer str
 		return q, invalid("На вопрос уже ответили")
 	}
 	now := a.now()
-	q.Answer, q.Status, q.AnsweredAt, q.AddToFAQ = answer, "answered", &now, addToFAQ && a.flags.FAQFromAnswers
+	q.Answer, q.Status, q.AnsweredAt, q.AddToFAQ = answer, "answered", &now, addToFAQ && a.ff().FAQFromAnswers
 	if err := a.store.SaveQuestion(ctx, q); err != nil {
 		return q, err
 	}

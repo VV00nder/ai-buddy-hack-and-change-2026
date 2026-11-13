@@ -481,7 +481,7 @@ func TestAuthAndValidation(t *testing.T) {
 	}
 	var du struct{ Users []domain.User }
 	c.do("GET", "/api/auth/demo-users", nil, &du)
-	if len(du.Users) != 8 {
+	if len(du.Users) != 9 {
 		t.Fatal("demo users")
 	}
 	anna := e.login("anna")

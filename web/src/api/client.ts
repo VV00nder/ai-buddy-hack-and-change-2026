@@ -72,8 +72,15 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     reminders: () => call('GET', '/api/reminders', obj({ reminders: S.Reminder.array() })),
     addReminder: (r: { text: string; link?: string; inHours?: number; at?: string }) => call('POST', '/api/reminders', S.Reminder, r),
     deleteReminder: (id: string) => call('DELETE', `/api/reminders/${encodeURIComponent(id)}`, ok),
-    assign: (userId: string, role: string, mentorId: string) =>
-      call('POST', `/api/department/${encodeURIComponent(userId)}/assign`, S.Department, { role, mentorId }),
+    assign: (userId: string, role: string, mentorId: string, team?: string) =>
+      call('POST', `/api/department/${encodeURIComponent(userId)}/assign`, S.Department, { role, mentorId, team }),
+    adminService: () => call('GET', '/api/admin/service', S.ServiceInfo),
+    adminFlag: (name: string, enabled: boolean) => call('PUT', `/api/admin/flags/${encodeURIComponent(name)}`, obj({ flags: S.Flags }), { enabled }),
+    adminCron: () => call('POST', '/api/admin/cron', S.CronReport),
+    adminSetUser: (userId: string, v: { role: string; team: string; mentorId?: string }) =>
+      call('PATCH', `/api/admin/users/${encodeURIComponent(userId)}`, S.Department, v),
+    adminPassword: (userId: string, password: string) =>
+      call('POST', `/api/admin/users/${encodeURIComponent(userId)}/password`, ok, { password }),
     team: () => call('GET', '/api/team', obj({ interns: S.InternSummary.array() })),
     internPlan: (id: string) => call('GET', `/api/team/${encodeURIComponent(id)}/plan`, obj({ plan: S.Plan, intern: S.User })),
     approvals: () => call('GET', '/api/approvals', obj({ approvals: S.Approval.array() })),

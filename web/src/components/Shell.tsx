@@ -16,6 +16,7 @@ import { Programs } from './Programs';
 import { Quizzes } from './Quizzes';
 import { Requests } from './Requests';
 import { Rights } from './Rights';
+import { Service } from './Service';
 import { Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
@@ -39,8 +40,8 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'knowledge', label: 'Инструкции' },
     { view: 'quizzes', label: 'Тесты' },
   ],
+  // заявки стажёров руководитель решает внутри «Стажёров» — отдельной вкладки нет
   lead: [
-    { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
     { view: 'programs', label: 'Шаблоны обучения' },
     { view: 'rights', label: 'Отдел и права' },
@@ -55,6 +56,16 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'knowledge', label: 'Инструкции' },
   ],
   newcomer: [],
+  admin: [
+    { view: 'team', label: 'Стажёры' },
+    { view: 'rights', label: 'Сотрудники и права' },
+    { view: 'service', label: 'Сервис' },
+    { view: 'programs', label: 'Шаблоны обучения' },
+    { view: 'insights', label: 'Польза' },
+    { view: 'chat', label: 'Чат' },
+    { view: 'knowledge', label: 'Инструкции' },
+    { view: 'quizzes', label: 'Тесты' },
+  ],
   hrbp: [
     { view: 'team', label: 'Стажёры' },
     { view: 'insights', label: 'Польза' },
@@ -67,7 +78,8 @@ const navByRole: Record<User['role'], NavItem[]> = {
 /** navFor — разделы по роли и выданным правам. */
 export function navFor(role: User['role'], perms: Set<string>): NavItem[] {
   const nav = [...navByRole[role]];
-  if (perms.has('approvals') && !nav.some((n) => n.view === 'approvals')) nav.unshift({ view: 'approvals', label: 'Согласования' });
+  const inTeam = role === 'lead' || role === 'admin';
+  if (perms.has('approvals') && !inTeam && !nav.some((n) => n.view === 'approvals')) nav.unshift({ view: 'approvals', label: 'Согласования' });
   if (perms.has('kb') && !nav.some((n) => n.view === 'quizzes')) nav.push({ view: 'quizzes', label: 'Тесты' });
   return nav;
 }
@@ -129,7 +141,7 @@ export function Shell({ user }: { user: User }) {
           <span className={`avatar role-${user.role}`} aria-hidden="true">{initials(user.name)}</span>
           <span className="me-text">
             <strong>{user.name}</strong>
-            <span className="muted">{roleName[user.role]}, {user.teamName}</span>
+            <span className="muted">{roleName[user.role]}{user.teamName ? `, ${user.teamName}` : ' сервиса'}</span>
           </span>
           <button className="link" onClick={() => void logout()}>Выйти</button>
         </div>
@@ -154,6 +166,7 @@ export function Shell({ user }: { user: User }) {
           {view === 'quizzes' && <Quizzes role={user.role} />}
           {view === 'programs' && <Programs />}
           {view === 'rights' && <Rights />}
+          {view === 'service' && <Service />}
           {view === 'inbox' && <Inbox />}
           {view === 'approvals' && <Approvals />}
           {view === 'team' && <Team />}

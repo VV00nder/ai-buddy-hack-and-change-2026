@@ -93,6 +93,9 @@ func run(log *slog.Logger) error {
 		Team:    func(ctx context.Context, u domain.User) ([]agent.InternBrief, error) { return a.TeamBriefs(ctx, u) }})
 	a = app.New(app.Config{CorpBaseURL: cfg.CorpURL, AgentTimeout: cfg.AgentTimeout, MsgRateLimit: cfg.MsgRateLimit},
 		app.Deps{Store: st, KV: sessions, Corp: corpClient, KB: kb, Templates: tpls, Agent: ag, Hub: hub, Flags: ff, Now: now, Log: log})
+	if err := a.LoadFlags(ctx); err != nil {
+		log.Error("flags", "err", err)
+	}
 	if err := a.LoadKB(ctx); err != nil {
 		return err
 	}

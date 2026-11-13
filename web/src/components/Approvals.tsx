@@ -33,15 +33,18 @@ export function ApprovalRow({ a, compact = false }: { a: Approval; compact?: boo
   const toast = useUi((s) => s.toast);
   const [comment, setComment] = useState('');
   const [withComment, setWithComment] = useState(!compact);
+  // отказ — всегда с причиной: стажёр должен понимать, что делать дальше
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: keys.approvals });
     void qc.invalidateQueries({ queryKey: keys.dashboard });
     void qc.invalidateQueries({ queryKey: ['internRequests'] });
   };
   const m = useMutation({
-    mutationFn: (approve: boolean) => api.decide(a.kind, a.externalId, approve, comment),
+    mutationFn: (approve: boolean) => api.decide(a.kind, a.externalId, approve, approve ? comment : reason.trim()),
     onSuccess: (_, approve) => {
-      toast(approve ? 'Согласовано — стажёр получил уведомление' : 'Отклонено — стажёр увидит комментарий');
+      toast(approve ? 'Согласовано — стажёр получил уведомление' : 'Отказано — стажёр получил уведомление с причиной');
       refresh();
     },
     onError: (e) => toast(e.message, 'error'),
@@ -70,28 +73,83 @@ export function ApprovalRow({ a, compact = false }: { a: Approval; compact?: boo
       <h3>{a.title}</h3>
       {d.exception && <p className="small exception-text">По правилам не положено: {d.exception}</p>}
       {(d.reason || d.justification) && <p className="small">«{d.reason ?? d.justification}»</p>}
-      {withComment ? (
-        <label className="field">
-          <span className="small">Комментарий стажёру</span>
-          <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} placeholder="Необязательно" />
-        </label>
-      ) : null}
-      <div className="note-actions">
-        <button className="btn small" disabled={m.isPending} onClick={() => m.mutate(true)}>{d.exception ? 'Сделать исключение' : 'Согласовать'}</button>
-        <button className="btn ghost small" disabled={m.isPending} onClick={() => m.mutate(false)}>Отклонить</button>
-        {!withComment && (
-          <button className="link small" onClick={() => setWithComment(true)}>+ комментарий</button>
-        )}
-        <label className="remind">
-          <span className="sr-only">Напомнить о заявке {a.externalId}</span>
-          <select value="" disabled={remind.isPending} onChange={(e) => e.target.value && remind.mutate(e.target.value)}>
-            <option value="">Напомнить…</option>
-            {remindChoices.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {rejecting ? (
+        <RejectForm
+          kind={a.kind}
+          reason={reason}
+          onReason={setReason}
+          pending={m.isPending}
+          onSubmit={() => m.mutate(false)}
+          onCancel={() => setRejecting(false)}
+        />
+      ) : (
+        <>
+          {withComment ? (
+            <label className="field">
+              <span className="small">Комментарий стажёру</span>
+              <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} placeholder="Необязательно" />
+            </label>
+          ) : null}
+          <div className="note-actions">
+            <button className="btn small" disabled={m.isPending} onClick={() => m.mutate(true)}>{d.exception ? 'Сделать исключение' : 'Согласовать'}</button>
+            <button className="btn ghost small" disabled={m.isPending} onClick={() => setRejecting(true)}>Отказать</button>
+            {!withComment && (
+              <button className="link small" onClick={() => setWithComment(true)}>+ комментарий</button>
+            )}
+            <label className="remind">
+              <span className="sr-only">Напомнить о заявке {a.externalId}</span>
+              <select value="" disabled={remind.isPending} onChange={(e) => e.target.value && remind.mutate(e.target.value)}>
+                <option value="">Напомнить…</option>
+                {remindChoices.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </>
+      )}
     </article>
+  );
+}
+
+const rejectReasons: Record<string, string[]> = {
+  absence: ['В эти даты релиз — выбери другой день', 'Обсудим на встрече 1:1', 'Сначала закрой просроченные шаги плана'],
+  access: ['Хватит уровня «чтение»', 'Для задачи нужен staging, не прод', 'Обсудим с наставником, зачем нужен доступ'],
+};
+
+/** Отказ: причина обязательна, частые причины — в один клик. */
+export function RejectForm(p: { kind: string; reason: string; onReason: (v: string) => void; pending: boolean; onSubmit: () => void; onCancel: () => void }) {
+  const ok = p.reason.trim().length >= 3;
+  return (
+    <form
+      className="reject-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (ok) p.onSubmit();
+      }}
+    >
+      <label className="field">
+        <span className="small">Причина отказа — стажёр увидит её в уведомлении</span>
+        <textarea
+          value={p.reason}
+          onChange={(e) => p.onReason(e.target.value)}
+          maxLength={500}
+          rows={2}
+          required
+          minLength={3}
+          autoFocus
+          placeholder="Например: в эти даты релиз, предложи другой день"
+        />
+      </label>
+      <div className="reason-chips" aria-label="Частые причины">
+        {rejectReasons[p.kind]?.map((r) => (
+          <button key={r} type="button" className="chip" onClick={() => p.onReason(r)}>{r}</button>
+        ))}
+      </div>
+      <div className="note-actions">
+        <button className="btn danger small" disabled={p.pending || !ok}>Отказать</button>
+        <button type="button" className="link small" onClick={p.onCancel}>Отмена</button>
+      </div>
+    </form>
   );
 }

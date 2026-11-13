@@ -119,14 +119,16 @@ await pause(1200);
 await logout();
 
 // 5. Руководитель согласует
-await caption('Руководитель Мария видит заявки и решает в один клик', 1800);
+await caption('Руководитель Мария видит заявки внутри строки стажёра и решает в один клик', 1800);
 await loginAs('Мария Волкова');
-await page.locator('.approval').first().waitFor();
-check('у руководителя только отгул', (await page.locator('.approval').count()) === 1);
+check('у руководителя нет отдельной вкладки согласований', (await page.getByRole('button', { name: 'Согласования', exact: true }).count()) === 0);
+await page.locator('.row-expand .approval').first().waitFor();
+check('у руководителя только отгул — внутри строки Анны', (await page.locator('.approval').count()) === 1);
 await pause(1200);
+await page.locator('.approval').first().getByRole('button', { name: '+ комментарий' }).click();
 await page.locator('.approval').first().getByPlaceholder('Необязательно').fill('Хорошего отдыха!');
 await page.locator('.approval').first().getByRole('button', { name: 'Согласовать' }).click();
-await page.getByText('Нечего согласовывать').waitFor();
+await page.getByText('Согласовано — стажёр получил уведомление').waitFor();
 await pause(1000);
 await logout();
 
@@ -275,6 +277,41 @@ await page.getByLabel('Пароль').fill('secret2026');
 await page.getByRole('button', { name: 'Войти', exact: true }).click();
 await page.getByRole('button', { name: 'Мой план', exact: true }).waitFor();
 check('у нового стажёра открылся план', true);
+// новый стажёр просит отгул — руководитель отказывает с причиной прямо из строки стажёра
+const off = new Date(Date.now() + 10 * 86400000);
+while (off.getDay() === 0 || off.getDay() === 6) off.setDate(off.getDate() + 1);
+const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+await page.getByRole('button', { name: 'Чат', exact: true }).click();
+await page.getByLabel('Сообщение').fill(`хочу отгул ${off.getDate()} ${months[off.getMonth()]}`);
+await page.keyboard.press('Enter');
+await page.getByRole('button', { name: 'Отправить заявку' }).last().click();
+await page.locator('.stamp', { hasText: /согласовании/i }).last().waitFor();
+await logout();
+await loginAs('Мария Волкова');
+await page.getByRole('button', { name: 'Стажёры', exact: true }).click();
+await caption('Заявки стажёра раскрываются прямо в строке: согласовать или отказать с причиной', 2400);
+const exp = page.locator('.row-expand', { hasText: 'Сидоров Пётр' }).first();
+await exp.getByRole('button', { name: 'Отказать' }).click();
+await exp.locator('.reason-chips .chip').first().click();
+await exp.getByRole('button', { name: 'Отказать' }).click();
+await page.getByText('Отказано — стажёр получил уведомление с причиной').waitFor();
+await page.locator('.row-expand .stamp-rejected').first().waitFor();
+check('руководитель отказал с причиной из строки стажёра', true);
+await logout();
+
+// администратор: сервис и все сотрудники
+await caption('Администратор сервиса: состояние, флаги возможностей, журнал и роли всех сотрудников', 2400);
+await loginAs('Ирина Белова');
+await page.getByRole('button', { name: 'Сервис', exact: true }).click();
+await page.locator('.svc-status li').first().waitFor();
+check('администратор видит состояние сервиса и журнал', (await page.locator('.svc-audit tbody tr').count()) > 5);
+await page.getByRole('button', { name: 'Сотрудники и права', exact: true }).click();
+await page.getByLabel('Найти сотрудника').fill('Сидоров');
+const row = page.locator('.admin-department tbody tr', { hasText: 'Сидоров Пётр' }).last();
+await row.locator('select').nth(1).selectOption('mentor');
+await row.getByRole('button', { name: 'Сохранить' }).click();
+await page.getByText(/Сидоров Пётр Андреевич: наставник/).waitFor();
+check('администратор назначил роль сотруднику', true);
 await logout();
 
 // 11. Польза

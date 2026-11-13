@@ -12,7 +12,8 @@ export type View =
   | 'team'
   | 'programs'
   | 'rights'
-  | 'insights';
+  | 'insights'
+  | 'service';
 
 export interface Toast {
   id: number;

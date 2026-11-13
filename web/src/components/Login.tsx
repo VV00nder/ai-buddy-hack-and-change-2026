@@ -11,6 +11,7 @@ const hints: Record<string, string> = {
   maria: 'Руководитель Анны: отгулы, доступы к Confluence кластера и Redash, метрики пользы.',
   pavel: 'Дежурный DevOps: согласует доступы к тестовому Kubernetes.',
   elena: 'HR BP команды: прогресс стажёров и метрики.',
+  admin: 'Администратор сервиса: выше руководителей — роли и отделы всех сотрудников, любые согласования, флаги возможностей, журнал действий.',
 };
 
 export function Login({ onDone, initialMode = 'login' }: { onDone: (u: User) => void; initialMode?: 'login' | 'register' }) {

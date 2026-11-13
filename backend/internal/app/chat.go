@@ -92,9 +92,9 @@ func (a *App) applyFlags(r agent.Reply) agent.Reply {
 	if r.Proposal == nil {
 		return r
 	}
-	off := (r.Proposal.Kind == domain.ActionAbsence && !a.flags.AbsenceActions) ||
-		(r.Proposal.Kind == domain.ActionAccess && !a.flags.AccessActions) ||
-		(r.Proposal.Kind == domain.ActionMentorQuestion && !a.flags.MentorEscalation)
+	off := (r.Proposal.Kind == domain.ActionAbsence && !a.ff().AbsenceActions) ||
+		(r.Proposal.Kind == domain.ActionAccess && !a.ff().AccessActions) ||
+		(r.Proposal.Kind == domain.ActionMentorQuestion && !a.ff().MentorEscalation)
 	if off {
 		r.Proposal = nil
 		r.Text += "\n\nОформление через AI-buddy сейчас отключено — воспользуйся корпоративным порталом."

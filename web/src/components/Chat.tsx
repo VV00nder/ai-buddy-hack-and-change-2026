@@ -13,6 +13,7 @@ const starters: Record<User['role'], string[]> = {
   hrbp: ['Кто сейчас стажируется?', 'Как проходит экваторная встреча?'],
   engineer: ['Какие доступы нужны стажёру?'],
   newcomer: [],
+  admin: ['Кто сейчас стажируется?', 'Как стажёру получить доступ к Redash?'],
 };
 
 export function Chat({ user }: { user: User }) {

@@ -61,7 +61,9 @@ test('client endpoints', async () => {
     api.internPlan('u'), api.approvals(), api.inbox(), api.answer('q', 'a', true), api.notifications(), api.insights(), api.docs(), api.doc('d'),
     api.dashboard(), api.internRequests('u 1'), api.reminders(), api.addReminder({ text: 'x', inHours: 1 }), api.deleteReminder('r1'),
     api.assign('u-new', 'intern', 'u-oleg'), api.startQuiz('q1'), api.cancelQuiz(), api.setGoalTask('g1', 't1', true),
-    api.addGoalTask('g1', { title: 'MR' }), api.addGoal('u', { title: 'Цель', metric: 'м', due: '2026-12-01', tasks: [{ title: 'a' }] })]) {
+    api.addGoalTask('g1', { title: 'MR' }), api.addGoal('u', { title: 'Цель', metric: 'м', due: '2026-12-01', tasks: [{ title: 'a' }] }),
+    api.adminService(), api.adminFlag('proactive', false), api.adminCron(), api.adminSetUser('u-ivan', { role: 'mentor', team: 'search' }),
+    api.adminPassword('u-anna', 'newpass2026')]) {
     await p.catch(() => undefined); // ответы-заглушки не проходят схему — проверяем только адреса
   }
   const urls = calls.map((c) => `${c.init.method} ${c.url}`);
@@ -70,7 +72,8 @@ test('client endpoints', async () => {
   assert.ok(urls.includes('POST /api/approvals/absence/ABS-1'));
   assert.ok(urls.includes('POST /api/inbox/q/answer'));
   for (const u of ['GET /api/dashboard', 'GET /api/team/u%201/requests', 'POST /api/reminders', 'DELETE /api/reminders/r1', 'POST /api/department/u-new/assign',
-    'POST /api/quizzes/q1/start', 'DELETE /api/quizzes/active', 'PATCH /api/goals/g1/tasks/t1', 'POST /api/goals/g1/tasks', 'POST /api/goals']) {
+    'POST /api/quizzes/q1/start', 'DELETE /api/quizzes/active', 'PATCH /api/goals/g1/tasks/t1', 'POST /api/goals/g1/tasks', 'POST /api/goals',
+    'GET /api/admin/service', 'PUT /api/admin/flags/proactive', 'POST /api/admin/cron', 'PATCH /api/admin/users/u-ivan', 'POST /api/admin/users/u-anna/password']) {
     assert.ok(urls.includes(u), u);
   }
 });

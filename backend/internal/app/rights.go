@@ -38,14 +38,31 @@ func (a *App) hasGrant(ctx context.Context, u domain.User, perm string) bool {
 	return err == nil && g.Team == u.Team
 }
 
-// canEditKB — руководитель или сотрудник с правом на инструкции.
-func (a *App) canEditKB(ctx context.Context, u domain.User) bool {
-	return u.Role == domain.RoleLead || (u.Role != domain.RoleIntern && a.hasGrant(ctx, u, PermKB))
+// PermAdmin — администрирование сервиса (только у администратора).
+const PermAdmin = "admin"
+
+func isAdmin(u domain.User) bool { return u.Role == domain.RoleAdmin }
+
+// sameTeam — содержимое отдела team доступно пользователю для правки:
+// своё у руководителя и сотрудников, любое — у администратора.
+func sameTeam(u domain.User, team string) bool { return isAdmin(u) || team == u.Team }
+
+// contentTeam — чьим становится новое содержимое: отдела автора, у администратора — общим для всех.
+func contentTeam(u domain.User) string {
+	if isAdmin(u) {
+		return "all"
+	}
+	return u.Team
 }
 
-// canManagePrograms — шаблоны обучения ведут руководитель и наставники.
+// canEditKB — руководитель, администратор или сотрудник с правом на инструкции.
+func (a *App) canEditKB(ctx context.Context, u domain.User) bool {
+	return u.Role == domain.RoleLead || isAdmin(u) || (u.Role != domain.RoleIntern && a.hasGrant(ctx, u, PermKB))
+}
+
+// canManagePrograms — шаблоны обучения ведут руководитель, наставники и администратор.
 func canManagePrograms(u domain.User) bool {
-	return u.Role == domain.RoleLead || u.Role == domain.RoleMentor
+	return u.Role == domain.RoleLead || u.Role == domain.RoleMentor || isAdmin(u)
 }
 
 // Perms — права пользователя для интерфейса.
@@ -59,6 +76,8 @@ func (a *App) Perms(ctx context.Context, s kv.Session) []string {
 		out = append(out, PermPrograms)
 	}
 	switch {
+	case isAdmin(u):
+		out = append(out, PermApprovals, PermAdmin)
 	case u.Role == domain.RoleLead:
 		out = append(out, PermApprovals)
 	case u.Role != domain.RoleIntern:
@@ -75,9 +94,9 @@ type Member struct {
 	Perms []string    `json:"perms"`
 }
 
-// Rights — права сотрудников команды (видит руководитель).
+// Rights — права сотрудников команды (видит руководитель; администратор — всех отделов).
 func (a *App) Rights(ctx context.Context, s kv.Session) ([]Member, error) {
-	if s.User.Role != domain.RoleLead {
+	if s.User.Role != domain.RoleLead && !isAdmin(s.User) {
 		return nil, ErrForbidden
 	}
 	users, err := a.DemoUsers(ctx)
@@ -96,7 +115,7 @@ func (a *App) Rights(ctx context.Context, s kv.Session) ([]Member, error) {
 	}
 	out := []Member{}
 	for _, u := range users {
-		if u.Team != s.User.Team || u.ID == s.User.ID || u.Role == domain.RoleIntern {
+		if !sameTeam(s.User, u.Team) || u.ID == s.User.ID || u.Role == domain.RoleIntern || u.Role == domain.RoleNewcomer || u.Role == domain.RoleAdmin || u.Role == domain.RoleLead && isAdmin(s.User) {
 			continue
 		}
 		m := Member{User: u, Perms: []string{}}
@@ -114,11 +133,11 @@ func (a *App) Rights(ctx context.Context, s kv.Session) ([]Member, error) {
 // SetRight — руководитель выдаёт или забирает право у сотрудника своей команды.
 func (a *App) SetRight(ctx context.Context, s kv.Session, userID, perm string, enabled bool) ([]Member, error) {
 	lead := s.User
-	if lead.Role != domain.RoleLead {
+	if lead.Role != domain.RoleLead && !isAdmin(lead) {
 		return nil, ErrForbidden
 	}
 	u, ok := a.userByID(ctx, userID)
-	if !ok || u.Team != lead.Team || u.ID == lead.ID {
+	if !ok || !sameTeam(lead, u.Team) || u.ID == lead.ID || u.Role == domain.RoleNewcomer {
 		return nil, ErrNotFound
 	}
 	if u.Role == domain.RoleIntern {

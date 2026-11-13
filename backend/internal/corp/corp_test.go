@@ -53,7 +53,7 @@ func toolCode(err error) string {
 
 func TestDirectory(t *testing.T) {
 	s := newSvc(t)
-	if len(s.Users()) != 8 {
+	if len(s.Users()) != 9 {
 		t.Fatal("users")
 	}
 	anna := claims(s, "anna")
@@ -530,14 +530,14 @@ func TestRegisterAndTransfer(t *testing.T) {
 		"unknown": {"u-none", "intern", "", "not_found"},
 		"old":     {"u-anna", "intern", "", "already_assigned"},
 	} {
-		if _, err := s.Assign(claims(s, "maria"), c.user, c.role, c.mentor); toolCode(err) != c.code {
+		if _, err := s.Assign(claims(s, "maria"), c.user, c.role, c.mentor, ""); toolCode(err) != c.code {
 			t.Errorf("assign %s: %v", name, err)
 		}
 	}
-	if _, err := s.Assign(claims(s, "oleg"), u.ID, "intern", ""); toolCode(err) != "forbidden" {
+	if _, err := s.Assign(claims(s, "oleg"), u.ID, "intern", "", ""); toolCode(err) != "forbidden" {
 		t.Fatal("mentor assigns")
 	}
-	if res, err := s.Assign(claims(s, "maria"), u.ID, "intern", "u-oleg"); err != nil || res["mentor"] == nil {
+	if res, err := s.Assign(claims(s, "maria"), u.ID, "intern", "u-oleg", ""); err != nil || res["mentor"] == nil {
 		t.Fatalf("assign: %v %v", res, err)
 	}
 	u, _ = s.UserByLogin("petr@example.com")
@@ -560,13 +560,13 @@ func TestRegisterAndTransfer(t *testing.T) {
 		t.Fatal("unknown login")
 	}
 	eng, _ := s.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123"})
-	if _, err := s.Assign(claims(s, "sergey"), eng.ID, "engineer", ""); err != nil {
+	if _, err := s.Assign(claims(s, "sergey"), eng.ID, "engineer", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if eng, _ = s.UserByLogin("inna@example.com"); eng.LeadID != "u-sergey" || eng.MentorID != "" {
 		t.Fatalf("engineer: %+v", eng)
 	}
-	if n := len(s.Users()); n != 10 {
+	if n := len(s.Users()); n != 11 {
 		t.Fatalf("users incl. registered: %d", n)
 	}
 	// перевод
@@ -627,7 +627,7 @@ func TestRegisterAndTransfer(t *testing.T) {
 	if _, err := s.Newcomers(maria); err == nil {
 		t.Fatal("outage newcomers")
 	}
-	if _, err := s.Assign(maria, "u-x", "intern", ""); err == nil {
+	if _, err := s.Assign(maria, "u-x", "intern", "", ""); err == nil {
 		t.Fatal("outage assign")
 	}
 }
@@ -693,4 +693,112 @@ func TestAccessException(t *testing.T) {
 	if l, _ := s.ListAccess(claims(s, "maria"), "approvals"); len(l["items"].([]AccessRequest)) < 2 || l["items"].([]AccessRequest)[0].Exception == "" {
 		t.Fatal("lead sees exception requests")
 	}
+}
+
+func TestAdmin(t *testing.T) {
+	s := newSvc(t)
+	admin := claims(s, "admin")
+	if admin.Role != domain.RoleAdmin {
+		t.Fatalf("admin claims: %+v", admin)
+	}
+	// заявка Анны ждёт Марию — администратор видит и решает её
+	abs, err := s.CreateAbsence(claims(s, "anna"), AbsenceInput{Type: "day_off", DateFrom: "2026-11-24"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.ListAbsences(admin, "approvals"); len(asList(l["items"])) != 1 {
+		t.Fatalf("admin approvals: %+v", l)
+	}
+	if _, err := s.DecideAbsence(admin, abs["id"].(string), "rejected", "Не в этот день"); err != nil {
+		t.Fatal(err)
+	}
+	// роли и отделы назначает только администратор
+	if _, err := s.SetUser(claims(s, "maria"), "u-ivan", "mentor", "search", ""); toolCode(err) != "forbidden" {
+		t.Fatalf("lead set user: %v", err)
+	}
+	for _, c := range []struct{ user, role, team, mentor, code string }{
+		{"u-none", "intern", "search", "", "not_found"},
+		{"u-admin", "lead", "search", "", "not_allowed_for_role"},
+		{"u-ivan", "admin", "search", "", "bad_role"},
+		{"u-ivan", "intern", "mars", "", "bad_team"},
+		{"u-oleg", "lead", "search", "", "lead_exists"},
+		{"u-ivan", "intern", "search", "u-dmitry", "bad_mentor"},
+	} {
+		if _, err := s.SetUser(admin, c.user, c.role, c.team, c.mentor); toolCode(err) != c.code {
+			t.Fatalf("%+v: %v", c, err)
+		}
+	}
+	// новый руководитель отдела: Мария становится наставником, Олег — руководителем;
+	// сотрудники отдела и ждущие решения заявки переходят к Олегу
+	pending, err := s.CreateAbsence(claims(s, "anna"), AbsenceInput{Type: "day_off", DateFrom: "2026-11-25"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetUser(admin, "u-maria", "mentor", "search", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetUser(admin, "u-oleg", "lead", "search", ""); err != nil {
+		t.Fatal(err)
+	}
+	anna, _ := s.UserByLogin("anna")
+	if anna.LeadID != "u-oleg" || anna.MentorID != "u-maria" {
+		t.Fatalf("relink: %+v", anna)
+	}
+	if g, _ := s.GetAbsence(claims(s, "oleg"), pending["id"].(string)); g["approverId"] != "u-oleg" {
+		t.Fatalf("pending moved: %+v", g)
+	}
+	// новичка администратор принимает в любой отдел; отдел обязателен
+	u, _ := s.Register(RegisterInput{Name: "Сидоров Пётр", Email: "petr@example.com", Password: "secret2026"})
+	if _, err := s.Assign(admin, u.ID, "hrbp", "", ""); toolCode(err) != "bad_team" {
+		t.Fatalf("assign without team: %v", err)
+	}
+	if res, err := s.Assign(admin, u.ID, "hrbp", "", "delivery"); err != nil || res["lead"] == nil {
+		t.Fatalf("admin assign: %v %+v", err, res)
+	}
+	if _, err := s.Assign(admin, u.ID, "intern", "", "delivery"); toolCode(err) != "already_assigned" {
+		t.Fatalf("reassign: %v", err)
+	}
+	// сброс пароля
+	if _, err := s.ResetPassword(admin, u.ID, "short"); toolCode(err) != "weak_password" {
+		t.Fatal("weak password")
+	}
+	if _, err := s.ResetPassword(claims(s, "maria"), u.ID, "newpass2026"); toolCode(err) != "forbidden" {
+		t.Fatal("lead reset")
+	}
+	if _, err := s.ResetPassword(admin, "u-anna", "newpass2026"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.CheckPassword("anna", "newpass2026", "buddy2026"); !ok {
+		t.Fatal("new password")
+	}
+	if _, ok := s.CheckPassword("anna", "buddy2026", "buddy2026"); ok {
+		t.Fatal("old demo password still works")
+	}
+	// администратор переводит сотрудника любого отдела и назначает заместителя руководителю
+	if _, err := s.Transfer(admin, "u-pavel", "delivery"); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s.SetDeputy(admin, "u-pavel", true); err != nil || len(asList(res["deputies"])) == 0 {
+		t.Fatalf("admin deputy: %v %+v", err, res)
+	}
+}
+
+func asList(v any) []any {
+	switch l := v.(type) {
+	case []any:
+		return l
+	case []Absence:
+		out := make([]any, len(l))
+		for i := range l {
+			out[i] = l[i]
+		}
+		return out
+	case []map[string]any:
+		out := make([]any, len(l))
+		for i := range l {
+			out[i] = l[i]
+		}
+		return out
+	}
+	return nil
 }
