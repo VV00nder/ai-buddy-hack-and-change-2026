@@ -32,17 +32,42 @@ func TestRegistration(t *testing.T) {
 	if search.LeadName != "Мария Волкова" {
 		t.Fatalf("lead in team list: %+v", search)
 	}
-	in := map[string]string{"name": "Пётр Сидоров", "email": "petr@example.com", "password": "secret123", "team": "search", "role": "intern"}
-	bad := map[string]string{"name": "Пётр", "email": "petr@example.com", "password": "secret123", "team": "search", "role": "intern"}
+	in := map[string]string{"name": "Пётр Сидоров", "email": "petr@example.com", "password": "secret123"}
+	bad := map[string]string{"name": "Пётр", "email": "petr@example.com", "password": "secret123"}
 	var errResp struct{ Message string }
 	if code := c.do("POST", "/api/auth/register", bad, &errResp); code != 400 || !strings.Contains(errResp.Message, "фамилию") {
 		t.Fatalf("validation: %d %+v", code, errResp)
 	}
 	var reg struct{ User domain.User }
-	if code := c.do("POST", "/api/auth/register", in, &reg); code != 201 || reg.User.LeadID != "u-maria" || reg.User.MentorID != "u-oleg" {
+	if code := c.do("POST", "/api/auth/register", in, &reg); code != 201 || reg.User.Role != domain.RoleNewcomer || reg.User.Team != "" {
 		t.Fatalf("register: %d %+v", code, reg)
 	}
-	// сразу вошёл: план стажёра с первого дня
+	// до назначения в отдел плана нет
+	if code := c.do("GET", "/api/plan", nil, nil); code == 200 {
+		t.Fatal("newcomer has plan")
+	}
+	// руководитель видит нового сотрудника и принимает его стажёром
+	maria := e.login("maria")
+	var notes0 struct{ Notifications []domain.Notification }
+	maria.do("GET", "/api/notifications", nil, &notes0)
+	if len(notes0.Notifications) == 0 || !strings.Contains(notes0.Notifications[0].Text, "ждёт назначения") {
+		t.Fatalf("lead notified: %+v", notes0)
+	}
+	var dep app.Department
+	maria.do("GET", "/api/department", nil, &dep)
+	if len(dep.Newcomers) != 1 || len(dep.Mentors) != 1 || dep.Mentors[0].ID != "u-oleg" {
+		t.Fatalf("department newcomers: %+v", dep)
+	}
+	if code := e.login("oleg").do("POST", "/api/department/"+reg.User.ID+"/assign", map[string]string{"role": "intern"}, nil); code != 403 {
+		t.Fatal("mentor assigns")
+	}
+	if code := maria.do("POST", "/api/department/"+reg.User.ID+"/assign", map[string]string{"role": "boss"}, nil); code != 400 {
+		t.Fatal("bad role")
+	}
+	if code := maria.do("POST", "/api/department/"+reg.User.ID+"/assign", map[string]string{"role": "intern", "mentorId": "u-oleg"}, &dep); code != 200 || len(dep.Newcomers) != 0 {
+		t.Fatalf("assign: %d %+v", code, dep)
+	}
+	// сразу (без повторного входа): план стажёра с первого дня
 	var plan onboarding.Plan
 	if code := c.do("GET", "/api/plan", nil, &plan); code != 200 || plan.Day != 1 {
 		t.Fatalf("plan of new intern: %d %+v", code, plan.Day)
@@ -58,17 +83,17 @@ func TestRegistration(t *testing.T) {
 	if code := e.anon().do("POST", "/api/auth/login", map[string]string{"login": "petr@example.com", "password": "buddy2026"}, nil); code != 401 {
 		t.Fatal("demo password must not work")
 	}
-	// руководитель и наставник видят нового стажёра и получили уведомления
-	maria, oleg := e.login("maria"), e.login("oleg")
+	// наставник видит нового стажёра
+	oleg := e.login("oleg")
 	var team struct{ Interns []app.InternSummary }
 	oleg.do("GET", "/api/team", nil, &team)
 	if len(team.Interns) != 2 {
 		t.Fatalf("mentor sees new intern: %+v", team.Interns)
 	}
 	var notes struct{ Notifications []domain.Notification }
-	maria.do("GET", "/api/notifications", nil, &notes)
-	if len(notes.Notifications) == 0 || !strings.Contains(notes.Notifications[0].Text, "Пётр Сидоров") {
-		t.Fatalf("lead notified: %+v", notes)
+	c.do("GET", "/api/notifications", nil, &notes)
+	if len(notes.Notifications) == 0 || !strings.Contains(notes.Notifications[0].Text, "Мария") {
+		t.Fatalf("newcomer notified: %+v", notes)
 	}
 	// на экране входа — только тестовые учётные записи
 	var demo struct{ Users []domain.User }

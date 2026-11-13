@@ -17,6 +17,8 @@ const (
 	recTemplate    = "template"
 	recProgram     = "program"
 	recGrant       = "grant"
+	recQuizLock    = "quiz_lock"
+	recReminder    = "reminder"
 )
 
 func putRec[T any](ctx context.Context, st store.Store, kind, id string, v T) error {

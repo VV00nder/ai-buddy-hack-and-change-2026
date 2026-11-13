@@ -21,6 +21,8 @@ type Question struct {
 	Options []string `json:"options"`
 	Correct int      `json:"correct"` // индекс правильного варианта
 	Explain string   `json:"explain,omitempty"`
+	// DocID — инструкция, где разобран вопрос (ссылка в разборе ошибок).
+	DocID string `json:"docId,omitempty"`
 }
 
 // Quiz — тест по теме или блоку тем.
@@ -75,6 +77,22 @@ type Review struct {
 	Correct int      `json:"correct"`
 	Right   bool     `json:"right"`
 	Explain string   `json:"explain,omitempty"`
+	// DocID — инструкция, которую стоит перечитать (DocTitle заполняет сервис).
+	DocID    string `json:"docId,omitempty"`
+	DocTitle string `json:"docTitle,omitempty"`
+}
+
+// HideAnswers убирает из разбора правильные ответы и пояснения к ошибкам:
+// стажёр видит, где ошибся, и ссылку на инструкцию, а не готовый ответ.
+func HideAnswers(rev []Review) []Review {
+	out := make([]Review, len(rev))
+	for i, r := range rev {
+		if !r.Right {
+			r.Correct, r.Explain = -1, ""
+		}
+		out[i] = r
+	}
+	return out
 }
 
 // LoadBuiltin — встроенные тесты по инструкциям прототипа.
@@ -147,7 +165,11 @@ func (q *Quiz) Grade(answers []int) (Attempt, []Review, error) {
 		if right {
 			a.Correct++
 		}
-		rev = append(rev, Review{Text: qq.Text, Options: qq.Options, Chosen: answers[i], Correct: qq.Correct, Right: right, Explain: qq.Explain})
+		doc := qq.DocID
+		if doc == "" && len(q.DocIDs) > 0 {
+			doc = q.DocIDs[0]
+		}
+		rev = append(rev, Review{Text: qq.Text, Options: qq.Options, Chosen: answers[i], Correct: qq.Correct, Right: right, Explain: qq.Explain, DocID: doc})
 	}
 	a.Percent = a.Correct * 100 / a.Total
 	a.Passed = a.Percent >= q.PassPercent

@@ -160,6 +160,25 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 				}
 				return s.Transfer(c, in.UserID, in.Team)
 			}},
+		{Info: mcp.ToolInfo{Name: "directory_newcomers", Title: "Новые сотрудники", Description: "Зарегистрированные сотрудники без отдела.",
+			Annotations: map[string]any{"readOnlyHint": true}},
+			Roles:   leads,
+			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Newcomers(c) })},
+		{Info: mcp.ToolInfo{Name: "directory_assign", Title: "Принять в отдел",
+			Description: "Руководитель принимает нового сотрудника в свой отдел и назначает роль (intern, engineer, mentor).",
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "role": str("Роль", "intern", "engineer", "mentor"), "mentor_id": str("Наставник стажёра")}, "user_id", "role")},
+			Roles: leads,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID   string `json:"user_id"`
+					Role     string `json:"role"`
+					MentorID string `json:"mentor_id"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.Assign(c, in.UserID, in.Role, in.MentorID)
+			}},
 		{Info: mcp.ToolInfo{Name: "delegation_list", Title: "Заместители", Description: "Мои заместители по согласованию и руководители, за которых я согласую.",
 			Annotations: map[string]any{"readOnlyHint": true}},
 			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Deputies(c) })},

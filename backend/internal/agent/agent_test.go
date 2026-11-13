@@ -133,8 +133,13 @@ func TestOfflineAccessScenario(t *testing.T) {
 	if r := e.ask("дай доступ к stash search-web на чтение"); r.Proposal == nil || r.Proposal.Args["level"] != "read" || !strings.Contains(r.Text, "Мария") {
 		t.Fatalf("stash read: %+v", r)
 	}
-	if r := e.ask("нужен админский доступ к stash search-indexer"); r.Proposal != nil || !strings.Contains(r.Text, "не выдаётся") || len(r.Suggestions) != 1 {
-		t.Fatalf("admin: %+v", r)
+	// вне правил — не отказ, а заявка руководителю на пересмотр (нужно обоснование)
+	r = e.ask("нужен админский доступ к stash search-indexer")
+	if r.Context["awaiting"] != "access_justification" {
+		t.Fatalf("admin asks justification: %+v", r)
+	}
+	if r := e.ask("Нужно настроить индексацию для задачи SEARCH-90", assistantCtx(r)); r.Proposal == nil || !strings.Contains(r.Text, "исключение") {
+		t.Fatalf("admin exception: %+v", r)
 	}
 	// тестовый кластер согласует DevOps и нужно обоснование
 	r = e.ask("нужен доступ к staging кластеру")
@@ -144,9 +149,9 @@ func TestOfflineAccessScenario(t *testing.T) {
 	if r := e.ask("Отладка индексатора поиска для задачи SEARCH-77", assistantCtx(r)); r.Proposal == nil || !strings.Contains(r.Text, "DevOps") {
 		t.Fatalf("staging justification: %+v", r)
 	}
-	// продовый kubernetes стажёру не положен — объясняем, ничего не готовим
+	// продовый kubernetes стажёру не положен — объясняем и предлагаем отправить руководителю с обоснованием
 	r = e.ask("дай доступ к kubernetes")
-	if r.Proposal != nil || !strings.Contains(r.Text, "staging") {
+	if r.Proposal != nil || !strings.Contains(r.Text, "staging") || !strings.Contains(r.Text, "пересмотр") || r.Context["awaiting"] != "access_justification" {
 		t.Fatalf("k8s: %+v", r)
 	}
 	// redash требует обоснования — ждём его следующим сообщением
@@ -314,7 +319,7 @@ func TestLLMToolErrorsAndFallback(t *testing.T) {
 			joined += m.Content
 		}
 	}
-	for _, want := range []string{"too_late", "not_allowed_for_role", "Олег", "not_found", "bad_arguments"} {
+	for _, want := range []string{"too_late", "justification_required", "Олег", "not_found", "bad_arguments"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("tool results miss %s: %s", want, joined)
 		}

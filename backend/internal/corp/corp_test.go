@@ -1,6 +1,7 @@
 package corp
 
 import (
+	"aibuddy/internal/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -198,9 +199,7 @@ func TestAccess(t *testing.T) {
 	}
 	cases := map[string]AccessInput{
 		"unknown_system":         {System: "nope"},
-		"not_allowed_for_role":   {System: "k8s-prod"},
 		"bad_level":              {System: "vpn", Level: "admin"},
-		"level_not_allowed":      {System: "stash", Project: "search-api", Level: "admin"},
 		"project_required":       {System: "stash", Level: "edit"},
 		"unknown_project":        {System: "stash", Project: "delivery-tracking"},
 		"justification_required": {System: "redash", Justification: "надо"},
@@ -502,23 +501,48 @@ func TestRegisterAndTransfer(t *testing.T) {
 	if ts := s.Teams(); len(ts) != 2 || ts[0].LeadName == "" {
 		t.Fatalf("teams with lead: %+v", ts)
 	}
-	ok := RegisterInput{Name: "  Пётр   Сидоров ", Email: "Petr@Example.com", Password: "secret123", Team: "search", Role: "intern"}
+	ok := RegisterInput{Name: "  Пётр   Сидоров ", Email: "Petr@Example.com", Password: "secret123"}
 	for name, bad := range map[string]RegisterInput{
-		"name":     {Name: "Пётр", Email: ok.Email, Password: ok.Password, Team: "search", Role: "intern"},
-		"email":    {Name: ok.Name, Email: "petr", Password: ok.Password, Team: "search", Role: "intern"},
-		"email2":   {Name: ok.Name, Email: "a b@x.ru", Password: ok.Password, Team: "search", Role: "intern"},
-		"password": {Name: ok.Name, Email: ok.Email, Password: "short1", Team: "search", Role: "intern"},
-		"digits":   {Name: ok.Name, Email: ok.Email, Password: "onlyletters", Team: "search", Role: "intern"},
-		"role":     {Name: ok.Name, Email: ok.Email, Password: ok.Password, Team: "search", Role: "lead"},
-		"team":     {Name: ok.Name, Email: ok.Email, Password: ok.Password, Team: "platform", Role: "intern"},
+		"name":     {Name: "Пётр", Email: ok.Email, Password: ok.Password},
+		"email":    {Name: ok.Name, Email: "petr", Password: ok.Password},
+		"email2":   {Name: ok.Name, Email: "a b@x.ru", Password: ok.Password},
+		"password": {Name: ok.Name, Email: ok.Email, Password: "short1"},
+		"digits":   {Name: ok.Name, Email: ok.Email, Password: "onlyletters"},
 	} {
 		if _, err := s.Register(bad); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
 	}
 	u, err := s.Register(ok)
-	if err != nil || u.Name != "Пётр Сидоров" || u.Login != "petr@example.com" || u.LeadID != "u-maria" || u.MentorID != "u-oleg" || !u.Registered {
+	if err != nil || u.Name != "Пётр Сидоров" || u.Login != "petr@example.com" || u.Role != domain.RoleNewcomer || u.Team != "" || !u.Registered {
 		t.Fatalf("register: %+v %v", u, err)
+	}
+	// руководитель принимает в отдел и назначает роль
+	if l, err := s.Newcomers(claims(s, "maria")); err != nil || len(l["items"].([]domain.User)) != 1 {
+		t.Fatalf("newcomers: %v %v", l, err)
+	}
+	if _, err := s.Newcomers(claims(s, "oleg")); toolCode(err) != "forbidden" {
+		t.Fatal("mentor newcomers")
+	}
+	for name, c := range map[string]struct{ user, role, mentor, code string }{
+		"role":    {u.ID, "lead", "", "bad_role"},
+		"mentor":  {u.ID, "intern", "u-dmitry", "bad_mentor"},
+		"unknown": {"u-none", "intern", "", "not_found"},
+		"old":     {"u-anna", "intern", "", "already_assigned"},
+	} {
+		if _, err := s.Assign(claims(s, "maria"), c.user, c.role, c.mentor); toolCode(err) != c.code {
+			t.Errorf("assign %s: %v", name, err)
+		}
+	}
+	if _, err := s.Assign(claims(s, "oleg"), u.ID, "intern", ""); toolCode(err) != "forbidden" {
+		t.Fatal("mentor assigns")
+	}
+	if res, err := s.Assign(claims(s, "maria"), u.ID, "intern", "u-oleg"); err != nil || res["mentor"] == nil {
+		t.Fatalf("assign: %v %v", res, err)
+	}
+	u, _ = s.UserByLogin("petr@example.com")
+	if u.Role != domain.RoleIntern || u.Team != "search" || u.LeadID != "u-maria" || u.MentorID != "u-oleg" {
+		t.Fatalf("after assign: %+v", u)
 	}
 	if _, err := s.Register(ok); err == nil {
 		t.Fatal("duplicate email")
@@ -535,8 +559,11 @@ func TestRegisterAndTransfer(t *testing.T) {
 	if _, ok := s.CheckPassword("none", "x", "buddy2026"); ok {
 		t.Fatal("unknown login")
 	}
-	eng, _ := s.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123", Team: "delivery", Role: "engineer"})
-	if eng.LeadID != "u-sergey" || eng.MentorID != "" {
+	eng, _ := s.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123"})
+	if _, err := s.Assign(claims(s, "sergey"), eng.ID, "engineer", ""); err != nil {
+		t.Fatal(err)
+	}
+	if eng, _ = s.UserByLogin("inna@example.com"); eng.LeadID != "u-sergey" || eng.MentorID != "" {
 		t.Fatalf("engineer: %+v", eng)
 	}
 	if n := len(s.Users()); n != 10 {
@@ -594,8 +621,14 @@ func TestRegisterAndTransfer(t *testing.T) {
 	if _, err := s.Transfer(maria, "u-elena", "delivery"); err == nil {
 		t.Fatal("outage transfer")
 	}
-	if _, err := s.Register(RegisterInput{Name: "Аа Бб", Email: "x@example.com", Password: "secret123", Team: "search", Role: "intern"}); err == nil {
+	if _, err := s.Register(RegisterInput{Name: "Аа Бб", Email: "x@example.com", Password: "secret123"}); err == nil {
 		t.Fatal("outage register")
+	}
+	if _, err := s.Newcomers(maria); err == nil {
+		t.Fatal("outage newcomers")
+	}
+	if _, err := s.Assign(maria, "u-x", "intern", ""); err == nil {
+		t.Fatal("outage assign")
 	}
 }
 
@@ -605,7 +638,7 @@ func TestStateFile(t *testing.T) {
 	if err := s.UseStateFile(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Register(RegisterInput{Name: "Пётр Сидоров", Email: "petr@example.com", Password: "secret123", Team: "search", Role: "intern"}); err != nil {
+	if _, err := s.Register(RegisterInput{Name: "Пётр Сидоров", Email: "petr@example.com", Password: "secret123"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Transfer(claims(s, "maria"), "u-elena", "delivery"); err != nil {
@@ -621,7 +654,7 @@ func TestStateFile(t *testing.T) {
 	if e, _ := s2.UserByLogin("elena"); e.Team != "delivery" {
 		t.Fatal("transfer restored")
 	}
-	u, _ := s2.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123", Team: "search", Role: "engineer"})
+	u, _ := s2.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123"})
 	if u.ID == "" || u.ID == "u-1001" {
 		t.Fatalf("id sequence continues: %s", u.ID)
 	}
@@ -640,5 +673,24 @@ func TestRequestIDsUniqueAcrossRestarts(t *testing.T) {
 	rb, _ := b.CreateAbsence(claims(b, "anna"), AbsenceInput{DateFrom: "2026-11-16"})
 	if ra["id"] == rb["id"] || !strings.HasPrefix(ra["id"].(string), "ABS-") {
 		t.Fatalf("ids: %v %v", ra["id"], rb["id"])
+	}
+}
+
+func TestAccessException(t *testing.T) {
+	s := newSvc(t)
+	anna := claims(s, "anna")
+	// вне правил: без обоснования — просьба объяснить; с обоснованием — заявка руководителю как исключение
+	for _, in := range []AccessInput{{System: "k8s-prod"}, {System: "stash", Project: "search-web", Level: "admin"}} {
+		if _, err := s.RequestAccess(anna, in); toolCode(err) != "justification_required" {
+			t.Errorf("exception without justification %s: %v", in.System, err)
+		}
+		in.Justification = "Нужно для отладки задачи SEARCH-77"
+		out, err := s.RequestAccess(anna, in)
+		if err != nil || out["status"] != "pending" || out["approver_id"] != "u-maria" || out["exception"] == nil || !strings.Contains(out["expected"].(string), "исключение") {
+			t.Errorf("exception %s: %v %v", in.System, out, err)
+		}
+	}
+	if l, _ := s.ListAccess(claims(s, "maria"), "approvals"); len(l["items"].([]AccessRequest)) < 2 || l["items"].([]AccessRequest)[0].Exception == "" {
+		t.Fatal("lead sees exception requests")
 	}
 }

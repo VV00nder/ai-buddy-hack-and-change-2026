@@ -25,13 +25,11 @@ type TeamInfo struct {
 	LeadName string `json:"leadName"`
 }
 
-// RegisterInput — данные регистрации.
+// RegisterInput — данные регистрации: ФИО, почта и пароль. Отдел и роль назначает руководитель.
 type RegisterInput struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	Team     string `json:"team"`
-	Role     string `json:"role"`
 }
 
 // Teams — отделы с руководителями (для регистрации и перевода).
@@ -82,13 +80,14 @@ func (a *App) Register(ctx context.Context, in RegisterInput, client string) (st
 	if err := a.kv.SetSession(ctx, sid, kv.Session{User: out.User, Token: out.Token}, a.cfg.SessionTTL); err != nil {
 		return "", domain.User{}, err
 	}
-	a.Track(ctx, out.User.ID, "registered", map[string]any{"role": out.User.Role, "team": out.User.Team})
-	a.notify(ctx, out.User.ID, "welcome", "Добро пожаловать в AI-buddy! Ваш руководитель увидит вас в своём отделе.", "/")
-	if out.User.LeadID != "" {
-		a.notify(ctx, out.User.LeadID, "team", fmt.Sprintf("В ваш отдел зарегистрировался сотрудник: %s (%s)", out.User.Name, roleRu(out.User.Role)), "/rights")
-	}
-	if out.User.MentorID != "" {
-		a.notify(ctx, out.User.MentorID, "team", "Вы — наставник нового стажёра: "+out.User.Name, "/team")
+	a.Track(ctx, out.User.ID, "registered", nil)
+	a.notify(ctx, out.User.ID, "welcome", "Учётная запись создана. Руководитель примет вас в отдел и назначит роль — после этого откроются план и инструменты.", "/")
+	if users, err := a.DemoUsers(ctx); err == nil {
+		for _, u := range users {
+			if u.Role == domain.RoleLead {
+				a.notify(ctx, u.ID, "team", fmt.Sprintf("Новый сотрудник ждёт назначения в отдел: %s (%s)", out.User.Name, out.User.Email), "/rights")
+			}
+		}
 	}
 	return sid, out.User, nil
 }
@@ -103,14 +102,19 @@ func roleRu(r domain.Role) string {
 		return "руководитель"
 	case domain.RoleHRBP:
 		return "HR BP"
+	case domain.RoleNewcomer:
+		return "ожидает назначения"
 	}
 	return "сотрудник"
 }
 
-// Department — сотрудники отдела руководителя и отделы, куда можно перевести.
+// Department — сотрудники отдела руководителя, отделы для перевода и новые
+// сотрудники, ждущие назначения.
 type Department struct {
-	Members []domain.User `json:"members"`
-	Teams   []TeamInfo    `json:"teams"`
+	Members   []domain.User `json:"members"`
+	Teams     []TeamInfo    `json:"teams"`
+	Newcomers []domain.User `json:"newcomers"`
+	Mentors   []domain.User `json:"mentors"`
 }
 
 // MyDepartment — сотрудники отдела (видит руководитель).
@@ -126,10 +130,16 @@ func (a *App) MyDepartment(ctx context.Context, s kv.Session) (Department, error
 	if err != nil {
 		return Department{}, err
 	}
-	d := Department{Members: []domain.User{}, Teams: teams}
+	d := Department{Members: []domain.User{}, Teams: teams, Newcomers: []domain.User{}, Mentors: []domain.User{}}
 	for _, u := range users {
 		if u.Team == s.User.Team && u.ID != s.User.ID {
 			d.Members = append(d.Members, u)
+			if u.Role == domain.RoleMentor {
+				d.Mentors = append(d.Mentors, u)
+			}
+		}
+		if u.Role == domain.RoleNewcomer {
+			d.Newcomers = append(d.Newcomers, u)
 		}
 	}
 	return d, nil
@@ -174,5 +184,36 @@ func (a *App) Transfer(ctx context.Context, s kv.Session, userID, team string) (
 	if u.Role == domain.RoleIntern {
 		a.publishPlan(ctx, u)
 	}
+	return a.MyDepartment(ctx, s)
+}
+
+// AssignNewcomer — руководитель принимает нового сотрудника в свой отдел и назначает роль.
+func (a *App) AssignNewcomer(ctx context.Context, s kv.Session, userID, role, mentorID string) (Department, error) {
+	if s.User.Role != domain.RoleLead {
+		return Department{}, ErrForbidden
+	}
+	res, err := a.corp.Call(ctx, s.Token, "directory_assign", map[string]any{"user_id": userID, "role": role, "mentor_id": mentorID})
+	var ce *mcp.CallError
+	if errors.As(err, &ce) {
+		if ce.Code == "forbidden" {
+			return Department{}, ErrForbidden
+		}
+		return Department{}, invalid("%s", ce.Message)
+	}
+	if err != nil {
+		return Department{}, ErrUnavailable
+	}
+	a.invalidateUsers()
+	u, ok := a.userByID(ctx, userID)
+	if !ok {
+		return Department{}, ErrNotFound
+	}
+	msg := fmt.Sprintf("%s принял(а) вас в отдел «%s», роль — %s", s.User.Name, u.TeamName, roleRu(u.Role))
+	if m, ok := res["mentor"].(map[string]any); ok {
+		msg += fmt.Sprintf(", наставник — %v", m["name"])
+		a.notify(ctx, u.MentorID, "team", "Вы — наставник нового стажёра: "+u.Name, "/team")
+	}
+	a.notify(ctx, u.ID, "team", msg, "/")
+	a.Track(ctx, s.User.ID, "newcomer_assigned", map[string]any{"user": u.ID, "role": u.Role})
 	return a.MyDepartment(ctx, s)
 }

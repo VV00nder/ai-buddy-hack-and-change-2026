@@ -21,6 +21,7 @@ type ReminderReport struct {
 	Digests       int `json:"digests"`
 	StaleRequests int `json:"staleRequests"`
 	OpenQuestions int `json:"openQuestions"`
+	Reminders     int `json:"reminders"`
 }
 
 // once отмечает, что напоминание key уже отправлено сегодня.
@@ -41,6 +42,7 @@ func (a *App) RunReminders(ctx context.Context) (ReminderReport, error) {
 	if !a.flags.Proactive {
 		return rep, ErrDisabled
 	}
+	rep.Reminders = a.FireReminders(ctx)
 	users, err := a.DemoUsers(ctx)
 	if err != nil {
 		return rep, err
@@ -121,6 +123,19 @@ func (a *App) digest(ctx context.Context, u domain.User) bool {
 
 // StartReminders запускает встроенный таймер (если внешний крон не настроен).
 func (a *App) StartReminders(ctx context.Context, every time.Duration) {
+	// напоминания, которые пользователи поставили сами, проверяются каждую минуту
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				a.FireReminders(ctx)
+			}
+		}
+	}()
 	if every <= 0 || !a.flags.Proactive {
 		return
 	}

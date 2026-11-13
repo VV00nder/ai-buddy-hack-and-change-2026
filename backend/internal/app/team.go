@@ -24,6 +24,8 @@ type Approval struct {
 	UserName   string         `json:"userName"`
 	Title      string         `json:"title"`
 	Details    map[string]any `json:"details"`
+	// WaitingHours — сколько ждёт решения (заполняется в кабинете).
+	WaitingHours int `json:"waitingHours"`
 }
 
 // Approvals — входящие на согласование (руководитель).
@@ -282,7 +284,9 @@ func (a *App) Team(ctx context.Context, viewer domain.User) ([]InternSummary, er
 		}
 		s := InternSummary{User: u, Day: p.Day, Percent: p.Percent, Done: p.Done, Total: p.Total, Overdue: p.Overdue, OpenQuestions: open}
 		goals, _ := a.store.Goals(ctx, u.ID)
+		stepDone := a.stepDoneMap(ctx, u.ID)
 		for _, g := range goals {
+			g = withProgress(g, stepDone)
 			s.GoalsTotal++
 			if g.Status == domain.GoalDone {
 				s.GoalsDone++

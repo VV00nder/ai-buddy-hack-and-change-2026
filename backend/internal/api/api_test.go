@@ -55,7 +55,7 @@ func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 	e.st = store.NewMemory()
 	corpClient := mcp.NewClient(e.corpTS.URL+"/mcp", 2*time.Second)
 	plan := func(ctx context.Context, u domain.User) (onboarding.Plan, error) { return e.app.PlanFor(ctx, u) }
-	goals := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return e.st.Goals(ctx, u.ID) }
+	goals := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return e.app.Goals(ctx, u, u.ID) }
 	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now,
 		SetStep: func(ctx context.Context, u domain.User, step string, st domain.StepStatus) (onboarding.Plan, error) {
 			return e.app.SetStep(ctx, u, u.ID, step, st, "")
@@ -765,7 +765,8 @@ func TestGoals(t *testing.T) {
 	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "пока не поставлены") {
 		t.Fatalf("no goals: %s", m.Text)
 	}
-	in := map[string]any{"internId": "u-anna", "title": "Закрыть первую задачу SEARCH-101", "metric": "MR прошёл ревью и выкачен на staging", "due": "2026-11-24"}
+	in := map[string]any{"internId": "u-anna", "title": "Закрыть первую задачу SEARCH-101", "metric": "MR прошёл ревью и выкачен на staging", "due": "2026-11-24",
+		"tasks": []map[string]string{{"stepId": "w1-avito-cli"}, {"title": "Сделать MR"}}}
 	var out struct{ Goal domain.Goal }
 	if code := anna.do("POST", "/api/goals", in, nil); code != 403 {
 		t.Fatal("intern cannot set goals")
@@ -773,7 +774,7 @@ func TestGoals(t *testing.T) {
 	if code := e.login("sergey").do("POST", "/api/goals", in, nil); code != 403 {
 		t.Fatal("foreign lead")
 	}
-	for k, v := range map[string]any{"title": "x", "metric": "y", "due": "завтра"} {
+	for k, v := range map[string]any{"title": "x", "metric": "y", "due": "завтра", "tasks": []any{}} {
 		bad := map[string]any{}
 		for kk, vv := range in {
 			bad[kk] = vv
@@ -811,30 +812,59 @@ func TestGoals(t *testing.T) {
 		t.Fatal("unknown intern")
 	}
 	id := out.Goal.ID
-	p50, note := 50, "Код готов, жду ревью"
-	if code := anna.do("PATCH", "/api/goals/"+id, map[string]any{"progress": p50, "note": note}, &out); code != 200 || out.Goal.Status != domain.GoalInProgress || out.Goal.Note != note {
-		t.Fatalf("progress: %+v", out.Goal)
+	if len(out.Goal.Tasks) != 2 || out.Goal.Tasks[0].Title != "Настрой avito-cli" || out.Goal.Progress != 0 {
+		t.Fatalf("tasks: %+v", out.Goal)
 	}
-	for _, bad := range []map[string]any{{"progress": 120}, {"status": "lost"}, {"note": strings.Repeat("я", 501)}} {
-		if code := anna.do("PATCH", "/api/goals/"+id, bad, nil); code != 400 {
-			t.Fatalf("bad update %v", bad)
-		}
+	note := "Код готов, жду ревью"
+	if code := anna.do("PATCH", "/api/goals/"+id, map[string]any{"note": note}, &out); code != 200 || out.Goal.Note != note {
+		t.Fatalf("note: %+v", out.Goal)
 	}
-	if code := ivan.do("PATCH", "/api/goals/"+id, map[string]any{"status": "done"}, nil); code != 403 {
+	if code := anna.do("PATCH", "/api/goals/"+id, map[string]any{"note": strings.Repeat("я", 501)}, nil); code != 400 {
+		t.Fatal("long note")
+	}
+	if code := ivan.do("PATCH", "/api/goals/"+id, map[string]any{"note": "x"}, nil); code != 403 {
 		t.Fatal("foreign update")
 	}
-	if code := anna.do("PATCH", "/api/goals/none", map[string]any{"status": "done"}, nil); code != 404 {
+	if code := anna.do("PATCH", "/api/goals/none", map[string]any{"note": "x"}, nil); code != 404 {
 		t.Fatal("unknown goal")
 	}
-	anna.do("PATCH", "/api/goals/"+id, map[string]any{"status": "done"}, &out)
-	if out.Goal.Progress != 100 {
-		t.Fatal("done = 100%")
+	// прогресс считается сам: шаг плана закрыт — 50%
+	anna.do("PATCH", "/api/plan/steps/w1-avito-cli", map[string]string{"status": "done"}, nil)
+	anna.do("GET", "/api/goals", nil, &list)
+	if g := list.Goals[0]; g.Progress != 50 || g.Status != domain.GoalInProgress || !g.Tasks[0].Done {
+		t.Fatalf("auto progress: %+v", g)
+	}
+	// задачу-шаг нельзя отметить в цели, свою — можно
+	if code := anna.do("PATCH", "/api/goals/"+id+"/tasks/"+out.Goal.Tasks[0].ID, map[string]bool{"done": true}, nil); code != 400 {
+		t.Fatal("step task in goal")
+	}
+	if code := anna.do("PATCH", "/api/goals/"+id+"/tasks/none", map[string]bool{"done": true}, nil); code != 404 {
+		t.Fatal("unknown task")
+	}
+	if code := ivan.do("PATCH", "/api/goals/"+id+"/tasks/"+out.Goal.Tasks[1].ID, map[string]bool{"done": true}, nil); code != 403 {
+		t.Fatal("foreign task")
+	}
+	anna.do("PATCH", "/api/goals/"+id+"/tasks/"+out.Goal.Tasks[1].ID, map[string]bool{"done": true}, &out)
+	if out.Goal.Progress != 100 || out.Goal.Status != domain.GoalDone {
+		t.Fatalf("done = 100%%: %+v", out.Goal)
 	}
 	var n struct{ Notifications []domain.Notification }
 	maria.do("GET", "/api/notifications", nil, &n)
-	if !strings.Contains(n.Notifications[0].Text, "отметил(а) цель выполненной") {
+	if !strings.Contains(n.Notifications[0].Text, "выполнил(а) цель") {
 		t.Fatalf("lead notified: %+v", n.Notifications)
 	}
+	// руководитель добавляет задачу — процент пересчитывается
+	var g2 struct{ Goal domain.Goal }
+	if code := maria.do("POST", "/api/goals/"+id+"/tasks", map[string]string{"title": "Выкатить на staging"}, &g2); code != 200 || g2.Goal.Progress != 66 {
+		t.Fatalf("add task: %d %+v", code, g2.Goal)
+	}
+	if code := anna.do("POST", "/api/goals/"+id+"/tasks", map[string]string{"title": "Своя задача"}, nil); code != 403 {
+		t.Fatal("intern adds task")
+	}
+	if code := maria.do("POST", "/api/goals/"+id+"/tasks", map[string]string{"stepId": "none"}, nil); code != 400 {
+		t.Fatal("unknown step")
+	}
+	anna.do("PATCH", "/api/goals/"+id+"/tasks/"+g2.Goal.Tasks[2].ID, map[string]bool{"done": true}, &out)
 	var team struct{ Interns []app.InternSummary }
 	maria.do("GET", "/api/team", nil, &team)
 	if team.Interns[0].GoalsTotal != 2 || team.Interns[0].GoalsDone != 1 {

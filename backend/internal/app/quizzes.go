@@ -145,7 +145,8 @@ func (a *App) SubmitQuiz(ctx context.Context, u domain.User, id string, answers 
 	if err := putRec(ctx, a.store, recQuizAttempt, at.ID, at); err != nil {
 		return QuizResult{}, err
 	}
-	res := QuizResult{Attempt: at, Review: rev, StepsDone: []string{}}
+	_ = a.store.DeleteRecord(ctx, recQuizLock, u.ID) // тест завершён — чат и инструкции снова доступны
+	res := QuizResult{Attempt: at, Review: a.titled(u, quiz.HideAnswers(rev)), StepsDone: []string{}}
 	typ := "quiz_failed"
 	if at.Passed {
 		typ = "quiz_passed"
@@ -209,7 +210,7 @@ func (a *App) withReview(ctx context.Context, intern domain.User, atts []quiz.At
 		}
 		if q != nil && len(q.Questions) == len(at.Answers) {
 			_, rev, _ := q.Grade(at.Answers)
-			v.Review = rev
+			v.Review = a.titled(intern, rev)
 		}
 		out = append(out, v)
 	}
@@ -233,7 +234,13 @@ func (a *App) QuizResults(ctx context.Context, viewer domain.User, internID stri
 	if err != nil {
 		return nil, err
 	}
-	return a.withReview(ctx, intern, atts), nil
+	views := a.withReview(ctx, intern, atts)
+	if viewer.ID == intern.ID { // себе — без готовых ответов, со ссылками на инструкции
+		for i := range views {
+			views[i].Review = quiz.HideAnswers(views[i].Review)
+		}
+	}
+	return views, nil
 }
 
 // InternQuizResults — результаты одного стажёра в сводке команды.
@@ -331,4 +338,53 @@ func (a *App) QuizRefs(ctx context.Context, u domain.User) ([]agent.QuizRef, err
 		out = append(out, agent.QuizRef{ID: q.ID, Title: q.Title, DocIDs: q.DocIDs, Passed: q.Passed, Best: q.Best})
 	}
 	return out, nil
+}
+
+// titled подставляет названия инструкций в разбор.
+func (a *App) titled(u domain.User, rev []quiz.Review) []quiz.Review {
+	for i := range rev {
+		if d, ok := a.kb.Get(rev[i].DocID, u); ok {
+			rev[i].DocTitle = d.Title
+		} else {
+			rev[i].DocID = ""
+		}
+	}
+	return rev
+}
+
+// QuizLock — тест в процессе: пока он идёт, инструкции и чат закрыты.
+type QuizLock struct {
+	QuizID string    `json:"quizId"`
+	Title  string    `json:"title"`
+	Until  time.Time `json:"until"`
+}
+
+// quizLockTTL — сколько держится блокировка, если тест бросили.
+const quizLockTTL = 30 * time.Minute
+
+// StartQuiz начинает тест: возвращает вопросы и закрывает инструкции и чат до сдачи.
+func (a *App) StartQuiz(ctx context.Context, u domain.User, id string) (quiz.Public, error) {
+	q, err := a.quizByID(ctx, u, id)
+	if err != nil {
+		return quiz.Public{}, err
+	}
+	if err := putRec(ctx, a.store, recQuizLock, u.ID, QuizLock{QuizID: q.ID, Title: q.Title, Until: a.now().Add(quizLockTTL)}); err != nil {
+		return quiz.Public{}, err
+	}
+	a.Track(ctx, u.ID, "quiz_started", map[string]any{"quiz": q.ID})
+	return q.Public(), nil
+}
+
+// CancelQuiz прерывает тест без попытки.
+func (a *App) CancelQuiz(ctx context.Context, u domain.User) error {
+	return a.store.DeleteRecord(ctx, recQuizLock, u.ID)
+}
+
+// ActiveQuiz — идущий тест пользователя, если есть.
+func (a *App) ActiveQuiz(ctx context.Context, u domain.User) (QuizLock, bool) {
+	l, err := getRec[QuizLock](ctx, a.store, recQuizLock, u.ID)
+	if err != nil || !a.now().Before(l.Until) {
+		return QuizLock{}, false
+	}
+	return l, true
 }

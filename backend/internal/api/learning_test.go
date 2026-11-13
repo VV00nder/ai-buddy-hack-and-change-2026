@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -248,10 +249,44 @@ func TestQuizzes(t *testing.T) {
 	if code := anna.do("POST", "/api/quizzes/quiz-week1/submit", map[string]any{"answers": []int{1}}, nil); code != 400 {
 		t.Fatal("partial answers")
 	}
+	// во время теста инструкции и чат закрыты на сервере
+	if code := anna.do("POST", "/api/quizzes/quiz-week1/start", nil, &raw); code != 200 || strings.Contains(fmt.Sprint(raw), "correct") {
+		t.Fatalf("start: %d", code)
+	}
+	for _, c := range []struct{ m, p string }{{"GET", "/api/kb"}, {"GET", "/api/kb/tool-stash-keys"}, {"GET", "/api/messages"}, {"POST", "/api/messages"}} {
+		var body any
+		if c.m == "POST" {
+			body = map[string]string{"text": "какую часть ключа добавить?"}
+		}
+		if code := anna.do(c.m, c.p, body, nil); code != 423 {
+			t.Fatalf("locked %s %s: %d", c.m, c.p, code)
+		}
+	}
+	var me struct{ ActiveQuiz *app.QuizLock }
+	if anna.do("GET", "/api/me", nil, &me); me.ActiveQuiz == nil || me.ActiveQuiz.QuizID != "quiz-week1" {
+		t.Fatal("active quiz in /api/me")
+	}
+	if code := oleg.do("GET", "/api/kb", nil, nil); code != 200 {
+		t.Fatal("lock is per user")
+	}
 	var res app.QuizResult
 	anna.do("POST", "/api/quizzes/quiz-week1/submit", map[string]any{"answers": []int{0, 0, 0, 0, 0}}, &res)
-	if res.Attempt.Passed || res.Attempt.Correct != 2 || len(res.Review) != 5 || res.Review[0].Explain == "" {
+	if res.Attempt.Passed || res.Attempt.Correct != 2 || len(res.Review) != 5 {
 		t.Fatalf("failed attempt: %+v", res.Attempt)
+	}
+	// в ошибках — не правильный ответ, а ссылка на инструкцию
+	if r := res.Review[0]; r.Right || r.Correct != -1 || r.Explain != "" || r.DocID != "process-access" || r.DocTitle == "" {
+		t.Fatalf("wrong answer review: %+v", r)
+	}
+	if code := anna.do("GET", "/api/kb", nil, nil); code != 200 {
+		t.Fatal("unlocked after submit")
+	}
+	anna.do("POST", "/api/quizzes/quiz-week1/start", nil, nil)
+	if code := anna.do("DELETE", "/api/quizzes/active", nil, nil); code != 200 || anna.do("GET", "/api/kb", nil, nil) != 200 {
+		t.Fatal("cancel quiz")
+	}
+	if code := anna.do("POST", "/api/quizzes/none/start", nil, nil); code != 404 {
+		t.Fatal("start unknown")
 	}
 	anna.do("POST", "/api/quizzes/quiz-week1/submit", map[string]any{"answers": []int{1, 0, 1, 2, 0}}, &res)
 	if !res.Attempt.Passed || res.Attempt.Percent != 100 || !slices.Contains(res.StepsDone, "w1-quiz") {
@@ -300,8 +335,8 @@ func TestQuizzes(t *testing.T) {
 	if code := dmitry.do("GET", "/api/quiz-results?internId=u-anna", nil, nil); code != 403 {
 		t.Fatal("other mentor results")
 	}
-	if code := anna.do("GET", "/api/quiz-results", nil, &atts); code != 200 || len(atts.Attempts) != 2 {
-		t.Fatal("own results")
+	if code := anna.do("GET", "/api/quiz-results", nil, &atts); code != 200 || len(atts.Attempts) != 2 || atts.Attempts[0].Review[0].Correct != -1 {
+		t.Fatal("own results without answers")
 	}
 	var team struct{ Interns []app.InternSummary }
 	oleg.do("GET", "/api/team", nil, &team)

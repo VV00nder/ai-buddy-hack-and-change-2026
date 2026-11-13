@@ -13,6 +13,8 @@ const (
 	RoleHRBP   Role = "hrbp"
 	// RoleEngineer — сотрудник без управленческой роли (например, дежурный DevOps).
 	RoleEngineer Role = "engineer"
+	// RoleNewcomer — зарегистрировался, но руководитель ещё не принял его в отдел и не назначил роль.
+	RoleNewcomer Role = "newcomer"
 )
 
 // User — профиль сотрудника из корпоративного справочника (синтетика).
@@ -196,11 +198,20 @@ type Goal struct {
 	Metric    string     `json:"metric"` // критерий успеха
 	Due       string     `json:"due"`    // ГГГГ-ММ-ДД
 	Status    GoalStatus `json:"status"`
-	Progress  int        `json:"progress"` // 0..100
+	Progress  int        `json:"progress"` // 0..100 — считается по закрытым задачам
+	Tasks     []GoalTask `json:"tasks"`
 	Note      string     `json:"note,omitempty"`
 	CreatedBy string     `json:"createdBy"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
+}
+
+// GoalTask — задача цели. Если задача — шаг плана (StepID), она закрывается вместе с шагом.
+type GoalTask struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	StepID string `json:"stepId,omitempty"`
+	Done   bool   `json:"done"`
 }
 
 // Event — продуктовое событие (совместимо по форме с clickstream).

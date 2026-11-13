@@ -84,7 +84,7 @@ func run(log *slog.Logger) error {
 	// a создаётся после агента, а агенту нужен план и тесты из сервисного слоя.
 	var a *app.App
 	planFn := func(ctx context.Context, u domain.User) (onboarding.Plan, error) { return a.PlanFor(ctx, u) }
-	goalsFn := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return st.Goals(ctx, u.ID) }
+	goalsFn := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return a.Goals(ctx, u, u.ID) }
 	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: planFn, Goals: goalsFn, LLM: model, Now: now, Log: log,
 		SetStep: func(ctx context.Context, u domain.User, step string, status domain.StepStatus) (onboarding.Plan, error) {
 			return a.SetStep(ctx, u, u.ID, step, status, "")
@@ -134,12 +134,16 @@ func demoGoals(now time.Time) map[string][]app.GoalInput {
 	d := func(days int) string { return now.AddDate(0, 0, days).Format("2006-01-02") }
 	return map[string][]app.GoalInput{
 		"u-anna": {
-			{Title: "Закрыть первую задачу команды: фильтр по дате в выдаче (SEARCH-101)", Metric: "MR прошёл ревью наставника и выкачен на staging", Due: d(14)},
-			{Title: "Разобраться в архитектуре поиска", Metric: "Схема сервисов поиска в Confluence команды, проверена наставником", Due: d(21)},
-			{Title: "Подготовиться к экваторной встрече", Metric: "Презентация с результатами согласована с куратором и руководителем", Due: d(87)},
+			{Title: "Закрыть первую задачу команды: фильтр по дате в выдаче (SEARCH-101)", Metric: "MR прошёл ревью наставника и выкачен на staging", Due: d(14),
+				Tasks: []app.TaskInput{{StepID: "w1-stash"}, {StepID: "w1-avito-cli"}, {Title: "Сделать MR с фильтром по дате"}, {Title: "Пройти ревью наставника"}, {Title: "Выкатить на staging"}}},
+			{Title: "Разобраться в архитектуре поиска", Metric: "Схема сервисов поиска в Confluence команды, проверена наставником", Due: d(21),
+				Tasks: []app.TaskInput{{StepID: "w2-docs"}, {StepID: "w2-observer"}, {Title: "Нарисовать схему сервисов поиска"}, {Title: "Согласовать схему с наставником"}}},
+			{Title: "Подготовиться к экваторной встрече", Metric: "Презентация с результатами согласована с куратором и руководителем", Due: d(87),
+				Tasks: []app.TaskInput{{Title: "Собрать результаты стажировки"}, {Title: "Согласовать презентацию с руководителем"}, {StepID: "a3-equator"}}},
 		},
 		"u-ivan": {
-			{Title: "Взять на себя дежурство по трекингу посылок", Metric: "Две смены без эскалаций на старшего инженера", Due: d(30)},
+			{Title: "Взять на себя дежурство по трекингу посылок", Metric: "Две смены без эскалаций на старшего инженера", Due: d(30),
+				Tasks: []app.TaskInput{{Title: "Изучить runbook дежурства"}, {Title: "Отдежурить первую смену"}, {Title: "Отдежурить вторую смену"}}},
 		},
 	}
 }

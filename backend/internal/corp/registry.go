@@ -36,13 +36,12 @@ func hashPassword(pw string, salt []byte) []byte {
 	return h
 }
 
-// RegisterInput — данные регистрации.
+// RegisterInput — данные регистрации: ФИО, почта и пароль. Отдел и роль
+// назначает руководитель (Assign).
 type RegisterInput struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	Team     string `json:"team"`
-	Role     string `json:"role"` // intern | engineer
 }
 
 // RegisterError — ошибка проверки данных с текстом для пользователя.
@@ -130,8 +129,6 @@ func (s *Service) Register(in RegisterInput) (domain.User, error) {
 		return domain.User{}, regErr("Укажите корректную почту")
 	case !validPassword(in.Password):
 		return domain.User{}, regErr("Пароль — не короче 8 символов, с буквами и цифрами")
-	case in.Role != string(domain.RoleIntern) && in.Role != string(domain.RoleEngineer):
-		return domain.User{}, regErr("Выберите роль: стажёр или сотрудник")
 	}
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email {
 		return domain.User{}, regErr("Укажите корректную почту")
@@ -144,21 +141,11 @@ func (s *Service) Register(in RegisterInput) (domain.User, error) {
 	if _, ok := s.byLogin[email]; ok {
 		return domain.User{}, regErr("Эта почта уже зарегистрирована — войдите")
 	}
-	team, ok := s.teams[in.Team]
-	lead := s.leadOf(in.Team)
-	if !ok || lead == nil {
-		return domain.User{}, regErr("Выберите отдел из списка")
-	}
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
-	p := &Person{User: domain.User{ID: s.nextID("u"), Login: email, Email: email, Name: name, Role: domain.Role(in.Role),
-		Team: team.ID, TeamName: team.Name, LeadID: lead.ID, StartDate: s.today(), Registered: true}}
+	p := &Person{User: domain.User{ID: s.nextID("u"), Login: email, Email: email, Name: name, Role: domain.RoleNewcomer,
+		StartDate: s.today(), Registered: true}}
 	p.Handle = "@" + strings.SplitN(email, "@", 2)[0]
-	if p.Role == domain.RoleIntern {
-		if m := s.mentorOf(team.ID); m != nil {
-			p.MentorID = m.ID
-		}
-	}
 	s.users[p.ID] = p
 	s.byLogin[email] = p
 	s.order = append(s.order, email)
@@ -317,4 +304,67 @@ func (s *Service) persist() {
 	if os.WriteFile(tmp, b, 0o600) == nil {
 		_ = os.Rename(tmp, s.stateFile)
 	}
+}
+
+// Newcomers — зарегистрированные сотрудники, которых ещё не приняли в отдел (видят руководители).
+func (s *Service) Newcomers(c identity.Claims) (map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.outage {
+		return nil, errOutage
+	}
+	if lead, ok := s.users[c.Sub]; !ok || lead.Role != domain.RoleLead {
+		return nil, mcp.ErrForbidden
+	}
+	out := []domain.User{}
+	for _, l := range s.order {
+		if p := s.byLogin[l]; p != nil && p.Role == domain.RoleNewcomer {
+			out = append(out, p.User)
+		}
+	}
+	return map[string]any{"items": out}, nil
+}
+
+// Assign — руководитель принимает нового сотрудника в свой отдел и назначает роль.
+// Стажёру назначается наставник: выбранный руководителем или первый наставник отдела.
+func (s *Service) Assign(c identity.Claims, userID, role, mentorID string) (map[string]any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.outage {
+		return nil, errOutage
+	}
+	lead, ok := s.users[c.Sub]
+	if !ok || lead.Role != domain.RoleLead {
+		return nil, mcp.ErrForbidden
+	}
+	p, ok := s.users[userID]
+	switch {
+	case !ok:
+		return nil, mcp.NewToolError("not_found", "Сотрудник не найден")
+	case p.Role != domain.RoleNewcomer:
+		return nil, mcp.NewToolError("already_assigned", "Сотрудник уже работает в отделе — используйте перевод")
+	}
+	r := domain.Role(role)
+	if r != domain.RoleIntern && r != domain.RoleEngineer && r != domain.RoleMentor {
+		return nil, mcp.NewToolError("bad_role", "Роль: стажёр, сотрудник или наставник")
+	}
+	mentor := ""
+	if r == domain.RoleIntern {
+		if m, ok := s.users[mentorID]; mentorID != "" && ok && m.Team == lead.Team && m.Role == domain.RoleMentor {
+			mentor = m.ID
+		} else if mentorID != "" {
+			return nil, mcp.NewToolError("bad_mentor", "Наставник должен быть из вашего отдела")
+		} else if m := s.mentorOf(lead.Team); m != nil {
+			mentor = m.ID
+		}
+	}
+	team := s.teams[lead.Team]
+	p.Role, p.Team, p.TeamName, p.LeadID, p.MentorID = r, lead.Team, team.Name, lead.ID, mentor
+	p.StartDate = s.today() // стажировка начинается с назначения в отдел
+	s.persist()
+	out := map[string]any{"user": p.User}
+	if m := s.users[p.MentorID]; m != nil {
+		out["mentor"] = map[string]any{"id": m.ID, "name": m.Name}
+	}
+	return out, nil
 }

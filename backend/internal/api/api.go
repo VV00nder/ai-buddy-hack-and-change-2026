@@ -83,6 +83,8 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/goals", s.goals)
 	auth("POST /api/goals", s.addGoal)
 	auth("PATCH /api/goals/{id}", s.updateGoal)
+	auth("POST /api/goals/{id}/tasks", s.addGoalTask)
+	auth("PATCH /api/goals/{id}/tasks/{task}", s.setGoalTask)
 	auth("GET /api/team", s.team)
 	auth("GET /api/team/{intern}/plan", s.internPlan)
 	auth("GET /api/approvals", s.approvals)
@@ -107,6 +109,8 @@ func (s *Server) Handler() http.Handler {
 	auth("PUT /api/quizzes/{id}", s.quizSave)
 	auth("DELETE /api/quizzes/{id}", s.quizDelete)
 	auth("POST /api/quizzes/{id}/submit", s.quizSubmit)
+	auth("POST /api/quizzes/{id}/start", s.quizStart)
+	auth("DELETE /api/quizzes/active", s.quizCancel)
 	auth("GET /api/quiz-results", s.quizResults)
 	auth("GET /api/quiz-results/team", s.teamQuizResults)
 	auth("GET /api/templates", s.templates)
@@ -118,6 +122,12 @@ func (s *Server) Handler() http.Handler {
 	auth("POST /api/team/{intern}/program/assign", s.programAssign)
 	auth("GET /api/department", s.department)
 	auth("POST /api/department/{user}/transfer", s.transfer)
+	auth("POST /api/department/{user}/assign", s.assignNewcomer)
+	auth("GET /api/dashboard", s.dashboard)
+	auth("GET /api/team/{intern}/requests", s.internRequests)
+	auth("GET /api/reminders", s.reminders)
+	auth("POST /api/reminders", s.addReminder)
+	auth("DELETE /api/reminders/{id}", s.deleteReminder)
 	auth("GET /api/rights", s.rights)
 	auth("POST /api/rights", s.rightSet)
 	auth("GET /api/events", s.events)
@@ -179,8 +189,17 @@ func (s *Server) requireSession(h http.HandlerFunc) http.Handler {
 			s.fail(w, err)
 			return
 		}
+		// новый сотрудник до назначения в отдел видит только профиль и уведомления
+		if sess.User.Role == domain.RoleNewcomer && !newcomerAllowed(r.URL.Path) {
+			writeErr(w, 403, "awaiting_assignment", "Руководитель ещё не принял вас в отдел")
+			return
+		}
 		h(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, sess)))
 	})
+}
+
+func newcomerAllowed(path string) bool {
+	return path == "/api/me" || path == "/api/events" || strings.HasPrefix(path, "/api/notifications")
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -346,6 +365,98 @@ func (s *Server) transfer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, d)
 }
 
+func (s *Server) assignNewcomer(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Role     string `json:"role"`
+		MentorID string `json:"mentorId"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	d, err := s.app.AssignNewcomer(r.Context(), sessionFrom(r), r.PathValue("user"), in.Role, in.MentorID)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, d)
+}
+
+func (s *Server) addGoalTask(w http.ResponseWriter, r *http.Request) {
+	var in app.TaskInput
+	if !decode(w, r, &in) {
+		return
+	}
+	g, err := s.app.AddGoalTask(r.Context(), sessionFrom(r).User, r.PathValue("id"), in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"goal": g})
+}
+
+func (s *Server) setGoalTask(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Done bool `json:"done"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	g, err := s.app.SetGoalTask(r.Context(), sessionFrom(r).User, r.PathValue("id"), r.PathValue("task"), in.Done)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"goal": g})
+}
+
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	d, err := s.app.Dashboard(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, d)
+}
+
+func (s *Server) internRequests(w http.ResponseWriter, r *http.Request) {
+	rs, err := s.app.InternRequests(r.Context(), sessionFrom(r), r.PathValue("intern"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"requests": rs})
+}
+
+func (s *Server) reminders(w http.ResponseWriter, r *http.Request) {
+	rs, err := s.app.Reminders(r.Context(), sessionFrom(r).User)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"reminders": rs})
+}
+
+func (s *Server) addReminder(w http.ResponseWriter, r *http.Request) {
+	var in app.ReminderInput
+	if !decode(w, r, &in) {
+		return
+	}
+	rm, err := s.app.AddReminder(r.Context(), sessionFrom(r).User, in)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 201, rm)
+}
+
+func (s *Server) deleteReminder(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteReminder(r.Context(), sessionFrom(r).User, r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(CookieName); err == nil {
 		_ = s.app.Logout(r.Context(), c.Value)
@@ -356,10 +467,17 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r)
-	writeJSON(w, 200, map[string]any{"user": sess.User, "perms": s.app.Perms(r.Context(), sess)})
+	out := map[string]any{"user": sess.User, "perms": s.app.Perms(r.Context(), sess)}
+	if l, ok := s.app.ActiveQuiz(r.Context(), sess.User); ok {
+		out["activeQuiz"] = l
+	}
+	writeJSON(w, 200, out)
 }
 
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
+	if s.lockedByQuiz(w, r) {
+		return
+	}
 	m, err := s.app.Messages(r.Context(), sessionFrom(r).User)
 	if err != nil {
 		s.fail(w, err)
@@ -374,6 +492,9 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
+	if s.lockedByQuiz(w, r) {
+		return
+	}
 	var in struct{ Text string }
 	if !decode(w, r, &in) {
 		return
@@ -632,6 +753,9 @@ func (s *Server) docView(r *http.Request, d *knowledge.Doc, full bool) docView {
 }
 
 func (s *Server) kbList(w http.ResponseWriter, r *http.Request) {
+	if s.lockedByQuiz(w, r) {
+		return
+	}
 	u := sessionFrom(r).User
 	out := []docView{}
 	for _, d := range s.kb.Filter(r.URL.Query().Get("q"), u) {
@@ -646,6 +770,9 @@ func (s *Server) kbList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) kbGet(w http.ResponseWriter, r *http.Request) {
+	if s.lockedByQuiz(w, r) {
+		return
+	}
 	d, ok := s.kb.Get(r.PathValue("id"), sessionFrom(r).User)
 	if !ok {
 		s.fail(w, app.ErrNotFound)
@@ -719,6 +846,34 @@ func (s *Server) quizTake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, q)
+}
+
+func (s *Server) quizStart(w http.ResponseWriter, r *http.Request) {
+	q, err := s.app.StartQuiz(r.Context(), sessionFrom(r).User, r.PathValue("id"))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, q)
+}
+
+func (s *Server) quizCancel(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.CancelQuiz(r.Context(), sessionFrom(r).User); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// lockedByQuiz — во время теста инструкции и чат закрыты (проверка на сервере,
+// а не только в интерфейсе).
+func (s *Server) lockedByQuiz(w http.ResponseWriter, r *http.Request) bool {
+	l, ok := s.app.ActiveQuiz(r.Context(), sessionFrom(r).User)
+	if ok {
+		writeJSON(w, 423, map[string]string{"error": "quiz_in_progress", "quizId": l.QuizID,
+			"message": "Идёт тест «" + l.Title + "» — инструкции и чат откроются после его завершения"})
+	}
+	return ok
 }
 
 func (s *Server) quizEdit(w http.ResponseWriter, r *http.Request) {

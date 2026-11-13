@@ -71,22 +71,24 @@ type Absence struct {
 
 // AccessRequest — заявка на доступ.
 type AccessRequest struct {
-	ID            string     `json:"id"`
-	UserID        string     `json:"userId"`
-	UserName      string     `json:"userName"`
-	System        string     `json:"system"`
-	SystemName    string     `json:"systemName"`
-	Level         string     `json:"level"`
-	Project       string     `json:"project,omitempty"`
-	ApproverRole  string     `json:"approverRole,omitempty"`
-	Justification string     `json:"justification,omitempty"`
-	Status        string     `json:"status"` // granted | pending | rejected
-	DecidedBy     string     `json:"decidedBy,omitempty"`
-	ApproverID    string     `json:"approverId,omitempty"`
-	Approver      string     `json:"approver,omitempty"`
-	Comment       string     `json:"comment,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	DecidedAt     *time.Time `json:"decidedAt,omitempty"`
+	ID            string `json:"id"`
+	UserID        string `json:"userId"`
+	UserName      string `json:"userName"`
+	System        string `json:"system"`
+	SystemName    string `json:"systemName"`
+	Level         string `json:"level"`
+	Project       string `json:"project,omitempty"`
+	ApproverRole  string `json:"approverRole,omitempty"`
+	Justification string `json:"justification,omitempty"`
+	// Exception — почему заявка вне правил (решает руководитель как исключение).
+	Exception  string     `json:"exception,omitempty"`
+	Status     string     `json:"status"` // granted | pending | rejected
+	DecidedBy  string     `json:"decidedBy,omitempty"`
+	ApproverID string     `json:"approverId,omitempty"`
+	Approver   string     `json:"approver,omitempty"`
+	Comment    string     `json:"comment,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	DecidedAt  *time.Time `json:"decidedAt,omitempty"`
 }
 
 type fixtures struct {

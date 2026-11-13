@@ -85,8 +85,11 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 	if sys == nil {
 		return nil, mcp.NewToolError("unknown_system", "Такой системы нет в каталоге доступов")
 	}
+	// Вне правил (роль или уровень не положены) заявка не отклоняется молча:
+	// она уходит руководителю, который может сделать исключение.
+	exception := ""
 	if slices.Contains(sys.DeniedRoles, string(p.Role)) {
-		return nil, mcp.NewToolError("not_allowed_for_role", sys.DeniedHint)
+		exception = sys.DeniedHint
 	}
 	if in.Level == "" {
 		in.Level = sys.Levels[0]
@@ -94,8 +97,8 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 	if !slices.Contains(sys.Levels, in.Level) {
 		return nil, mcp.NewToolError("bad_level", "Доступные уровни: "+levelsRu(sys.Levels))
 	}
-	if slices.Contains(sys.DeniedLevels[string(p.Role)], in.Level) {
-		return nil, mcp.NewToolError("level_not_allowed", "Уровень «"+levelRu[in.Level]+"» для "+sys.Name+" стажёрам не выдаётся. Можно запросить: "+levelsRu(allowedLevels(sys, p.Role)))
+	if slices.Contains(sys.DeniedLevels[string(p.Role)], in.Level) && exception == "" {
+		exception = "Уровень «" + levelRu[in.Level] + "» для " + sys.Name + " стажёрам по правилам не выдаётся. Без исключения можно запросить: " + levelsRu(allowedLevels(sys, p.Role))
 	}
 	in.Project = strings.TrimSpace(strings.ToLower(in.Project))
 	if projects := sys.Projects[p.Team]; len(sys.Projects) > 0 {
@@ -109,7 +112,10 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 		in.Project = ""
 	}
 	in.Justification = strings.TrimSpace(in.Justification)
-	needJust := sys.JustificationRequired || in.Level == "admin"
+	needJust := sys.JustificationRequired || in.Level == "admin" || exception != ""
+	if exception != "" && utf8.RuneCountInString(in.Justification) < 15 {
+		return nil, mcp.NewToolError("justification_required", exception+" Если доступ всё же нужен, напиши, для какой задачи, — заявка уйдёт руководителю на пересмотр.")
+	}
 	if needJust && utf8.RuneCountInString(in.Justification) < 15 {
 		return nil, mcp.NewToolError("justification_required", "Для "+sys.Name+" нужно обоснование: для какой задачи нужен доступ (не короче 15 символов)")
 	}
@@ -123,15 +129,25 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 		}
 	}
 	r := &AccessRequest{UserID: p.ID, UserName: p.Name, System: sys.ID, SystemName: sys.Name, Level: in.Level, Project: in.Project,
-		Justification: in.Justification, CreatedAt: s.now()}
+		Justification: in.Justification, CreatedAt: s.now(), Exception: exception}
 	out := map[string]any{"dry_run": in.DryRun, "system": sys.ID, "system_name": sys.Name, "level": in.Level,
 		"level_name": levelRu[in.Level], "approval": sys.Approval}
 	if in.Project != "" {
 		out["project"] = in.Project
 	}
-	if sys.Approval == "auto" {
+	switch {
+	case exception != "":
+		lead := s.users[p.LeadID]
+		if lead == nil {
+			return nil, mcp.NewToolError("no_approver", "Не удалось определить руководителя")
+		}
+		r.ApproverID, r.Approver, r.ApproverRole = lead.ID, lead.Name, "руководитель"
+		out["approver"], out["approver_role"], out["approver_id"] = lead.Name, "руководитель", lead.ID
+		out["exception"] = exception
+		out["expected"] = "По правилам такой доступ не выдаётся. Заявка уйдёт руководителю (" + lead.Name + ") — он может пересмотреть решение и сделать исключение"
+	case sys.Approval == "auto":
 		out["expected"] = "Доступ выдаётся автоматически сразу после отправки"
-	} else {
+	default:
 		approver := s.approverFor(sys, p, in.Project)
 		if approver == nil {
 			return nil, mcp.NewToolError("no_approver", "Не удалось определить, кто согласует доступ")
@@ -146,7 +162,7 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 		return out, nil
 	}
 	r.ID = s.nextRequestID("ACC")
-	if sys.Approval == "auto" {
+	if sys.Approval == "auto" && exception == "" {
 		now := s.now()
 		r.Status, r.DecidedAt = "granted", &now
 	} else {
