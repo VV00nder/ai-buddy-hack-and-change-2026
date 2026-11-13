@@ -192,6 +192,20 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 				}
 				return s.DeleteRequest(c, in.Kind, in.ID)
 			}},
+		{Info: mcp.ToolInfo{Name: "directory_set_mentors", Title: "Наставники стажёра",
+			Description: "Руководитель стажёра или администратор назначает стажёру одного или нескольких наставников (первый — основной).",
+			InputSchema: schema(map[string]any{"user_id": str("ID стажёра"), "mentor_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "user_id", "mentor_ids")},
+			Roles: leads,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID    string   `json:"user_id"`
+					MentorIDs []string `json:"mentor_ids"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.SetMentors(c, in.UserID, in.MentorIDs)
+			}},
 		{Info: mcp.ToolInfo{Name: "admin_reset_password", Title: "Сброс пароля",
 			Description: "Администратор задаёт сотруднику новый пароль.",
 			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "password": str("Новый пароль")}, "user_id", "password")},

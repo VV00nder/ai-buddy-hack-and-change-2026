@@ -79,11 +79,13 @@ func (a *App) RunReminders(ctx context.Context) (ReminderReport, error) {
 			return rep, err
 		}
 		for _, q := range qs {
-			if q.Status != "open" || a.now().Sub(q.CreatedAt) < staleAfter || !a.once("question:"+q.ID) {
+			if q.Status != "open" || len(u.Mentors()) == 0 || a.now().Sub(q.CreatedAt) < staleAfter || !a.once("question:"+q.ID) {
 				continue
 			}
-			a.notify(ctx, q.MentorID, "question", fmt.Sprintf("Вопрос от %s ждёт ответа больше суток: «%s»", u.Name, q.Text), "/inbox")
-			a.Track(ctx, q.MentorID, "reminder_sent", map[string]any{"kind": "open_question"})
+			for _, id := range u.Mentors() {
+				a.notify(ctx, id, "question", fmt.Sprintf("Вопрос от %s ждёт ответа больше суток: «%s»", u.Name, q.Text), "/inbox")
+				a.Track(ctx, id, "reminder_sent", map[string]any{"kind": "open_question"})
+			}
 			rep.OpenQuestions++
 		}
 	}

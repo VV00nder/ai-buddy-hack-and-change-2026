@@ -71,9 +71,7 @@ func (a *App) Dashboard(ctx context.Context, s kv.Session) (Dashboard, error) {
 	sort.SliceStable(d.Approvals, func(i, j int) bool { return d.Approvals[i].WaitingHours > d.Approvals[j].WaitingHours })
 	for _, r := range team {
 		c := InternCard{InternSummary: r, Alerts: []string{}}
-		if m, ok := a.userByID(ctx, r.User.MentorID); ok {
-			c.MentorName = m.Name
-		}
+		c.MentorName = a.mentorNames(ctx, r.User)
 		for _, ap := range d.Approvals {
 			if ap.UserID == r.User.ID {
 				c.PendingApprovals++
@@ -308,6 +306,7 @@ type InternQuestion struct {
 	Status     string    `json:"status"`
 	Answer     string    `json:"answer,omitempty"`
 	MentorName string    `json:"mentorName,omitempty"`
+	AnsweredBy string    `json:"answeredBy,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
@@ -326,13 +325,17 @@ func (a *App) InternQuestions(ctx context.Context, s kv.Session, internID string
 	}
 	out := []InternQuestion{}
 	for _, q := range liveQuestions(qs) {
-		iq := InternQuestion{ID: q.ID, Text: q.Text, Status: q.Status, Answer: q.Answer, CreatedAt: q.CreatedAt}
-		if m, ok := a.userByID(ctx, q.MentorID); ok {
-			iq.MentorName = m.Name
-		}
+		iq := InternQuestion{ID: q.ID, Text: q.Text, Status: q.Status, Answer: q.Answer, AnsweredBy: q.AnsweredBy, CreatedAt: q.CreatedAt,
+			MentorName: a.mentorNames(ctx, intern)}
 		out = append(out, iq)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	// сначала те, что ждут ответа
+	sort.SliceStable(out, func(i, j int) bool {
+		if (out[i].Status == "open") != (out[j].Status == "open") {
+			return out[i].Status == "open"
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out, nil
 }
 
@@ -396,7 +399,9 @@ func (a *App) DeleteQuestion(ctx context.Context, s kv.Session, internID, questi
 	if err := a.store.SaveQuestion(ctx, q); err != nil {
 		return err
 	}
-	a.hub.Publish(q.MentorID, events.Update{Type: "question", Data: q})
+	for _, id := range intern.Mentors() {
+		a.hub.Publish(id, events.Update{Type: "question", Data: q})
+	}
 	if act, err := a.store.ActionByExternalID(ctx, q.ID); err == nil && act.Status != domain.ActionCancelled {
 		return a.dropAction(ctx, s, act, "удалил(а) вопрос наставнику")
 	}

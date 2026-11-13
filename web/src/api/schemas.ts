@@ -14,6 +14,7 @@ export const User = z.object({
   teamName: z.string().optional().default(''),
   track: z.string().optional(),
   mentorId: z.string().optional(),
+  mentorIds: z.array(z.string()).nullish(),
   leadId: z.string().optional(),
   startDate: z.string(),
   email: z.string().optional(),
@@ -146,6 +147,8 @@ export const Question = z.object({
   answer: z.string().optional(),
   addToFaq: z.boolean().optional(),
   status: z.enum(['open', 'answered']),
+  answeredBy: z.string().optional(),
+  internName: z.string().optional(),
   createdAt: z.string(),
 });
 export type Question = z.infer<typeof Question>;
@@ -190,6 +193,7 @@ export const Goal = z.object({
   due: z.string(),
   status: z.enum(['agreed', 'in_progress', 'done']),
   progress: z.number(),
+  auto: z.boolean().optional().default(false),
   tasks: z.array(GoalTask).nullish().transform((v) => v ?? []),
   note: z.string().optional(),
   createdBy: z.string(),
@@ -464,6 +468,7 @@ export const InternQuestion = z.object({
   status: z.string(),
   answer: z.string().optional(),
   mentorName: z.string().optional(),
+  answeredBy: z.string().optional(),
   createdAt: z.string(),
 });
 export type InternQuestion = z.infer<typeof InternQuestion>;

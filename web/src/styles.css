@@ -633,3 +633,17 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .req-del.confirm { display: inline-flex; gap: 6px; align-items: center; color: inherit; }
 .req .approval + .req-del { align-self: flex-start; }
 .ir-sub { font-size: 14px; margin-top: 6px; }
+.stage-goals { gap: 4px; }
+.stage-goal summary { display: grid; grid-template-columns: minmax(0, 1fr) 180px 150px; gap: 12px; align-items: center; cursor: pointer; list-style: none; padding: 6px 0; }
+.stage-goal summary::-webkit-details-marker { display: none; }
+.stage-goal summary .goal-title { font-weight: 600; }
+.stage-goal summary .progress-line { width: auto; }
+.stage-goal .goal-tasks { padding: 4px 0 8px 12px; }
+.stage-goal.goal-done summary .goal-title::after { content: " ✓"; color: var(--go); }
+@media (max-width: 760px) { .stage-goal summary { grid-template-columns: 1fr; gap: 4px; } }
+.mentors-panel { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.mentor-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mentor-chip { display: inline-flex; gap: 4px; align-items: center; padding: 3px 10px; border-radius: 99px; background: var(--surface); font-size: 14px; }
+.mentor-add { display: inline-flex; gap: 6px; align-items: center; }
+.mentor-add select { font-size: 13px; padding: 4px 6px; }
+.question.compact { flex: 1 1 100%; padding: 8px 0 0; border: 0; box-shadow: none; background: none; }

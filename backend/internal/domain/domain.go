@@ -2,6 +2,7 @@
 package domain
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -24,14 +25,16 @@ const (
 
 // User — профиль сотрудника из корпоративного справочника (синтетика).
 type User struct {
-	ID        string    `json:"id"`
-	Login     string    `json:"login"`
-	Name      string    `json:"name"`
-	Role      Role      `json:"role"`
-	Team      string    `json:"team"`
-	TeamName  string    `json:"teamName"`
-	Track     string    `json:"track,omitempty"`
-	MentorID  string    `json:"mentorId,omitempty"`
+	ID       string `json:"id"`
+	Login    string `json:"login"`
+	Name     string `json:"name"`
+	Role     Role   `json:"role"`
+	Team     string `json:"team"`
+	TeamName string `json:"teamName"`
+	Track    string `json:"track,omitempty"`
+	MentorID string `json:"mentorId,omitempty"`
+	// MentorIDs — все наставники стажёра (первый — основной, он же MentorID).
+	MentorIDs []string  `json:"mentorIds,omitempty"`
 	LeadID    string    `json:"leadId,omitempty"`
 	StartDate time.Time `json:"startDate"`
 	Email     string    `json:"email,omitempty"`
@@ -153,14 +156,18 @@ type Action struct {
 
 // Question — вопрос стажёра, переданный наставнику.
 type Question struct {
-	ID         string     `json:"id"`
-	InternID   string     `json:"internId"`
-	MentorID   string     `json:"mentorId"`
-	Text       string     `json:"text"`
-	Context    string     `json:"context,omitempty"`
-	Answer     string     `json:"answer,omitempty"`
-	AddToFAQ   bool       `json:"addToFaq"`
-	Status     string     `json:"status"` // open | answered
+	ID       string `json:"id"`
+	InternID string `json:"internId"`
+	MentorID string `json:"mentorId"`
+	Text     string `json:"text"`
+	Context  string `json:"context,omitempty"`
+	Answer   string `json:"answer,omitempty"`
+	AddToFAQ bool   `json:"addToFaq"`
+	Status   string `json:"status"` // open | answered | deleted
+	// AnsweredBy — кто ответил: наставник, руководитель или администратор.
+	AnsweredBy string `json:"answeredBy,omitempty"`
+	// InternName — имя стажёра (заполняется для входящих, не хранится).
+	InternName string     `json:"internName,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	AnsweredAt *time.Time `json:"answeredAt,omitempty"`
 }
@@ -197,18 +204,20 @@ const (
 
 // Goal — измеримая цель на период стажировки (трекер прогресса из чек-листа).
 type Goal struct {
-	ID        string     `json:"id"`
-	InternID  string     `json:"internId"`
-	Title     string     `json:"title"`
-	Metric    string     `json:"metric"` // критерий успеха
-	Due       string     `json:"due"`    // ГГГГ-ММ-ДД
-	Status    GoalStatus `json:"status"`
-	Progress  int        `json:"progress"` // 0..100 — считается по закрытым задачам
-	Tasks     []GoalTask `json:"tasks"`
-	Note      string     `json:"note,omitempty"`
-	CreatedBy string     `json:"createdBy"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
+	ID       string     `json:"id"`
+	InternID string     `json:"internId"`
+	Title    string     `json:"title"`
+	Metric   string     `json:"metric"` // критерий успеха
+	Due      string     `json:"due"`    // ГГГГ-ММ-ДД
+	Status   GoalStatus `json:"status"`
+	Progress int        `json:"progress"` // 0..100 — считается по закрытым задачам
+	Tasks    []GoalTask `json:"tasks"`
+	Note     string     `json:"note,omitempty"`
+	// Auto — цель создана из этапа плана: задачи — шаги этапа, шкала заполняется по плану.
+	Auto      bool      `json:"auto,omitempty"`
+	CreatedBy string    `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // GoalTask — задача цели. Если задача — шаг плана (StepID), она закрывается вместе с шагом.
@@ -239,4 +248,23 @@ func FirstName(full string) string {
 		return f[0]
 	}
 	return "коллега"
+}
+
+// Mentors — все наставники стажёра: основной и дополнительные.
+func (u User) Mentors() []string {
+	out := []string{}
+	if u.MentorID != "" {
+		out = append(out, u.MentorID)
+	}
+	for _, id := range u.MentorIDs {
+		if id != "" && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// HasMentor — id один из наставников стажёра.
+func (u User) HasMentor(id string) bool {
+	return id != "" && slices.Contains(u.Mentors(), id)
 }

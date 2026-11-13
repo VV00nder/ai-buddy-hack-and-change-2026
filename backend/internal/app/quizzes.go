@@ -158,12 +158,12 @@ func (a *App) SubmitQuiz(ctx context.Context, u domain.User, id string, answers 
 	if at.Passed {
 		res.StepsDone = a.completeQuizSteps(ctx, u, q)
 	}
-	if u.MentorID != "" {
+	for _, mentor := range u.Mentors() {
 		verdict := "сдал(а)"
 		if !at.Passed {
 			verdict = "не сдал(а)"
 		}
-		a.notify(ctx, u.MentorID, "quiz", fmt.Sprintf("%s %s тест «%s»: %d%% (%d из %d)", u.Name, verdict, q.Title, at.Percent, at.Correct, at.Total), "/team")
+		a.notify(ctx, mentor, "quiz", fmt.Sprintf("%s %s тест «%s»: %d%% (%d из %d)", u.Name, verdict, q.Title, at.Percent, at.Correct, at.Total), "/team")
 	}
 	return res, nil
 }

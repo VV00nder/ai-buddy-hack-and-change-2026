@@ -47,7 +47,7 @@ func TestRightsAndKBEditing(t *testing.T) {
 		t.Fatal("mentor rights")
 	}
 	var rights struct{ Members []app.Member }
-	if code := maria.do("GET", "/api/rights", nil, &rights); code != 200 || len(rights.Members) != 2 {
+	if code := maria.do("GET", "/api/rights", nil, &rights); code != 200 || len(rights.Members) != 3 {
 		t.Fatalf("rights: %d %+v", code, rights)
 	}
 	for body, code := range map[string]int{

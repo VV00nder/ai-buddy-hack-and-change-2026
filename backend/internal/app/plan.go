@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"aibuddy/internal/domain"
 	"aibuddy/internal/events"
@@ -17,7 +18,7 @@ func canViewIntern(viewer, intern domain.User) bool {
 	case domain.RoleAdmin:
 		return true
 	case domain.RoleMentor:
-		return intern.MentorID == viewer.ID
+		return intern.HasMentor(viewer.ID)
 	case domain.RoleLead:
 		return intern.LeadID == viewer.ID
 	case domain.RoleHRBP:
@@ -74,7 +75,7 @@ func (a *App) SetStep(ctx context.Context, actor domain.User, internID, stepID s
 		if step.Quiz != "" && status == domain.StepDone {
 			return onboarding.Plan{}, invalid("Этот шаг закроется сам, когда ты сдашь тест")
 		}
-	case actor.Role == domain.RoleMentor && intern.MentorID == actor.ID, actor.Role == domain.RoleLead && intern.LeadID == actor.ID, actor.Role == domain.RoleAdmin:
+	case actor.Role == domain.RoleMentor && intern.HasMentor(actor.ID), actor.Role == domain.RoleLead && intern.LeadID == actor.ID, actor.Role == domain.RoleAdmin:
 	default:
 		return onboarding.Plan{}, ErrForbidden
 	}
@@ -91,8 +92,32 @@ func (a *App) SetStep(ctx context.Context, actor domain.User, internID, stepID s
 	p, err := a.PlanFor(ctx, intern)
 	if err == nil {
 		a.hub.Publish(intern.ID, events.Update{Type: "plan", Data: p})
+		if status == domain.StepDone {
+			a.stageDone(ctx, intern, p, stepID)
+		}
 	}
 	return p, err
+}
+
+// stageDone — если шаг закрыл последний шаг этапа, цель «Пройти этап» выполнена:
+// руководитель и наставники получают уведомление.
+func (a *App) stageDone(ctx context.Context, intern domain.User, p onboarding.Plan, stepID string) {
+	for _, per := range p.Periods {
+		has := false
+		for _, s := range per.Steps {
+			has = has || s.ID == stepID
+		}
+		if !has || per.Done != per.Total || per.Total == 0 {
+			continue
+		}
+		msg := fmt.Sprintf("%s выполнил(а) цель: пройти этап «%s»", intern.Name, per.Name)
+		for _, id := range append([]string{intern.LeadID}, intern.Mentors()...) {
+			if id != "" {
+				a.notify(ctx, id, "plan", msg, "/team")
+			}
+		}
+		a.Track(ctx, intern.ID, "goal_done", map[string]any{"stage": per.ID})
+	}
 }
 
 // autoCompleteSteps отмечает шаги плана, которые закрываются выданными доступами.

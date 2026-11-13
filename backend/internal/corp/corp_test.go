@@ -53,7 +53,7 @@ func toolCode(err error) string {
 
 func TestDirectory(t *testing.T) {
 	s := newSvc(t)
-	if len(s.Users()) != 9 {
+	if len(s.Users()) != 10 {
 		t.Fatal("users")
 	}
 	anna := claims(s, "anna")
@@ -72,7 +72,7 @@ func TestDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	team, _ := s.TeamMembers(anna)
-	if len(team["members"].([]map[string]any)) != 4 { // anna, oleg, maria, elena
+	if len(team["members"].([]map[string]any)) != 5 { // anna, oleg, maria, elena, yuri
 		t.Fatalf("team: %v", team["members"])
 	}
 	if AbsencePolicy()["types"] == nil {
@@ -566,7 +566,7 @@ func TestRegisterAndTransfer(t *testing.T) {
 	if eng, _ = s.UserByLogin("inna@example.com"); eng.LeadID != "u-sergey" || eng.MentorID != "" {
 		t.Fatalf("engineer: %+v", eng)
 	}
-	if n := len(s.Users()); n != 11 {
+	if n := len(s.Users()); n != 12 {
 		t.Fatalf("users incl. registered: %d", n)
 	}
 	// перевод
@@ -839,5 +839,45 @@ func TestDeleteRequest(t *testing.T) {
 	}
 	if l, _ := s.ListAccess(claims(s, "anna"), "mine"); len(asList(l["items"])) != 0 {
 		t.Fatalf("access left: %+v", l)
+	}
+}
+
+func TestSetMentors(t *testing.T) {
+	s := newSvc(t)
+	admin := claims(s, "admin")
+	if _, err := s.SetUser(admin, "u-pavel", "mentor", "search", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetMentors(claims(s, "maria"), "u-anna", []string{"u-oleg", "u-pavel", "u-oleg"}); err != nil {
+		t.Fatal(err)
+	}
+	anna, _ := s.UserByLogin("anna")
+	if anna.MentorID != "u-oleg" || len(anna.Mentors()) != 2 {
+		t.Fatalf("mentors: %+v", anna)
+	}
+	for _, c := range []struct {
+		who  string
+		ids  []string
+		code string
+	}{
+		{"oleg", []string{"u-oleg"}, "forbidden"},
+		{"maria", nil, "mentor_required"},
+		{"maria", []string{"u-dmitry"}, "bad_mentor"},
+		{"maria", []string{"u-elena"}, "bad_mentor"},
+	} {
+		if _, err := s.SetMentors(claims(s, c.who), "u-anna", c.ids); toolCode(err) != c.code {
+			t.Fatalf("%+v: %v", c, err)
+		}
+	}
+	if _, err := s.SetMentors(claims(s, "maria"), "u-oleg", []string{"u-pavel"}); toolCode(err) != "not_found" {
+		t.Fatal("mentors for non-intern")
+	}
+	// наставник перестал быть наставником — у стажёра остаётся второй
+	if _, err := s.SetUser(admin, "u-oleg", "engineer", "search", ""); err != nil {
+		t.Fatal(err)
+	}
+	anna, _ = s.UserByLogin("anna")
+	if anna.MentorID != "u-pavel" || len(anna.Mentors()) != 1 {
+		t.Fatalf("relink mentors: %+v", anna)
 	}
 }

@@ -127,6 +127,7 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/team/{intern}/requests", s.internRequests)
 	auth("DELETE /api/team/{intern}/requests/{id}", s.deleteRequest)
 	auth("DELETE /api/team/{intern}/questions/{id}", s.deleteQuestion)
+	auth("PUT /api/team/{intern}/mentors", s.setMentors)
 	auth("GET /api/reminders", s.reminders)
 	auth("POST /api/reminders", s.addReminder)
 	auth("DELETE /api/reminders/{id}", s.deleteReminder)
@@ -438,7 +439,23 @@ func (s *Server) internRequests(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"requests": rs, "questions": qs, "canDelete": s.app.CanManageIntern(r.Context(), ses.User, id)})
+	writeJSON(w, 200, map[string]any{"requests": rs, "questions": qs, "canDelete": s.app.CanManageIntern(r.Context(), ses.User, id),
+		"canAnswer": s.app.CanAnswer(r.Context(), ses.User, id)})
+}
+
+func (s *Server) setMentors(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		MentorIDs []string `json:"mentorIds"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	u, err := s.app.SetMentors(r.Context(), sessionFrom(r), r.PathValue("intern"), in.MentorIDs)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"user": u})
 }
 
 func (s *Server) deleteRequest(w http.ResponseWriter, r *http.Request) {

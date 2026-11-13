@@ -9,6 +9,7 @@ import (
 
 	"aibuddy/internal/domain"
 	"aibuddy/internal/events"
+	"aibuddy/internal/onboarding"
 )
 
 // Цели стажировки: на первой неделе руководитель согласует со стажёром цели
@@ -101,7 +102,7 @@ func (a *App) goalTasks(ctx context.Context, intern domain.User, in []TaskInput)
 }
 
 func canSetGoals(actor, intern domain.User) bool {
-	return actor.Role == domain.RoleAdmin || (actor.Role == domain.RoleLead && intern.LeadID == actor.ID) || (actor.Role == domain.RoleMentor && intern.MentorID == actor.ID)
+	return actor.Role == domain.RoleAdmin || (actor.Role == domain.RoleLead && intern.LeadID == actor.ID) || (actor.Role == domain.RoleMentor && intern.HasMentor(actor.ID))
 }
 
 // Goals — цели стажёра.
@@ -116,15 +117,48 @@ func (a *App) Goals(ctx context.Context, viewer domain.User, internID string) ([
 	if !canViewIntern(viewer, intern) {
 		return nil, ErrForbidden
 	}
-	goals, err := a.store.Goals(ctx, internID)
+	return a.internGoals(ctx, intern)
+}
+
+// internGoals — цели из этапов плана и цели, поставленные вручную, с прогрессом.
+func (a *App) internGoals(ctx context.Context, intern domain.User) ([]domain.Goal, error) {
+	p, err := a.PlanFor(ctx, intern)
 	if err != nil {
 		return nil, err
 	}
-	done := a.stepDoneMap(ctx, internID)
-	for i := range goals {
-		goals[i] = withProgress(goals[i], done)
+	goals := planGoals(intern, p)
+	manual, err := a.store.Goals(ctx, intern.ID)
+	if err != nil {
+		return nil, err
+	}
+	done := a.stepDoneMap(ctx, intern.ID)
+	for _, g := range manual {
+		goals = append(goals, withProgress(g, done))
 	}
 	return goals, nil
+}
+
+// planGoals — по цели на каждый этап плана: задачи — шаги этапа, срок — срок последнего шага.
+// Цели не хранятся: при изменении программы стажёра они меняются вместе с ней.
+func planGoals(intern domain.User, p onboarding.Plan) []domain.Goal {
+	out := []domain.Goal{}
+	for _, per := range p.Periods {
+		if len(per.Steps) == 0 {
+			continue
+		}
+		g := domain.Goal{ID: "plan-" + per.ID, InternID: intern.ID, Title: "Пройти этап «" + per.Name + "»",
+			Metric: "Выполнены все шаги этапа в плане адаптации", Auto: true, CreatedBy: "ai-buddy"}
+		done := map[string]bool{}
+		for _, s := range per.Steps {
+			g.Tasks = append(g.Tasks, domain.GoalTask{ID: s.ID, Title: s.Title, StepID: s.ID})
+			done[s.ID] = s.Status == domain.StepDone
+			if s.Due > g.Due {
+				g.Due = s.Due
+			}
+		}
+		out = append(out, withProgress(g, done))
+	}
+	return out
 }
 
 // AddGoal — руководитель или наставник добавляет цель стажёру.

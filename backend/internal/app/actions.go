@@ -137,8 +137,11 @@ func (a *App) submitQuestion(ctx context.Context, s kv.Session, act domain.Actio
 	if err := a.store.SaveAction(ctx, act); err != nil {
 		return act, err
 	}
-	a.notify(ctx, s.User.MentorID, "question", s.User.Name+" спрашивает: "+q.Text, "/inbox")
-	a.hub.Publish(s.User.MentorID, events.Update{Type: "question", Data: q})
+	// вопрос видят все наставники стажёра (и руководитель — в «Стажёрах»)
+	for _, id := range s.User.Mentors() {
+		a.notify(ctx, id, "question", s.User.Name+" спрашивает: "+q.Text, "/inbox")
+		a.hub.Publish(id, events.Update{Type: "question", Data: q})
+	}
 	a.hub.Publish(s.User.ID, events.Update{Type: "action", Data: act})
 	a.Track(ctx, s.User.ID, "action_submitted", map[string]any{"kind": act.Kind})
 	a.Track(ctx, s.User.ID, "mentor_escalation", nil)

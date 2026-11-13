@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -167,16 +168,53 @@ func (a *App) Decide(ctx context.Context, s kv.Session, kind, externalID string,
 	return nil
 }
 
-// Inbox — вопросы стажёров наставнику.
+// mentorNames — наставники стажёра через запятую.
+func (a *App) mentorNames(ctx context.Context, intern domain.User) string {
+	var names []string
+	for _, id := range intern.Mentors() {
+		if m, ok := a.userByID(ctx, id); ok {
+			names = append(names, m.Name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// canAnswer — на вопросы стажёра отвечают его наставники, руководитель и администратор.
+func canAnswer(u, intern domain.User) bool {
+	return isAdmin(u) || (u.Role == domain.RoleLead && intern.LeadID == u.ID) || intern.HasMentor(u.ID)
+}
+
+// Inbox — вопросы стажёров, на которые пользователь может ответить: наставнику — его стажёров,
+// руководителю — стажёров отдела, администратору — всех.
 func (a *App) Inbox(ctx context.Context, u domain.User) ([]domain.Question, error) {
-	if u.Role != domain.RoleMentor {
+	if u.Role != domain.RoleMentor && u.Role != domain.RoleLead && !isAdmin(u) {
 		return nil, ErrForbidden
 	}
-	qs, err := a.store.QuestionsForMentor(ctx, u.ID)
+	users, err := a.DemoUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return liveQuestions(qs), nil
+	out := []domain.Question{}
+	for _, intern := range users {
+		if intern.Role != domain.RoleIntern || !canAnswer(u, intern) {
+			continue
+		}
+		qs, err := a.store.QuestionsOfIntern(ctx, intern.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, q := range liveQuestions(qs) {
+			q.InternName = intern.Name
+			out = append(out, q)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if (out[i].Status == "open") != (out[j].Status == "open") {
+			return out[i].Status == "open"
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
 }
 
 // liveQuestions — без вопросов, удалённых руководителем.
@@ -206,7 +244,8 @@ func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer str
 	if q.Status == QuestionDeleted {
 		return q, ErrNotFound
 	}
-	if q.MentorID != u.ID {
+	intern, ok := a.userByID(ctx, q.InternID)
+	if !ok || !canAnswer(u, intern) {
 		return q, ErrForbidden
 	}
 	answer = strings.TrimSpace(answer)
@@ -218,22 +257,29 @@ func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer str
 	}
 	now := a.now()
 	q.Answer, q.Status, q.AnsweredAt, q.AddToFAQ = answer, "answered", &now, addToFAQ && a.ff().FAQFromAnswers
+	q.AnsweredBy = u.Name
 	if err := a.store.SaveQuestion(ctx, q); err != nil {
 		return q, err
 	}
 	msg := domain.Message{ID: newID("m"), UserID: q.InternID, Author: "assistant", Status: domain.MsgDone, Mode: "mentor",
-		Text: fmt.Sprintf("**%s ответил на твой вопрос** «%s»:\n\n%s", u.Name, q.Text, answer), CreatedAt: a.stamp(), UpdatedAt: now}
+		Text: fmt.Sprintf("**%s (%s) ответил(а) на твой вопрос** «%s»:\n\n%s", u.Name, strings.ToLower(roleRu(u.Role)), q.Text, answer), CreatedAt: a.stamp(), UpdatedAt: now}
 	_ = a.store.SaveMessage(ctx, msg)
 	a.hub.Publish(q.InternID, events.Update{Type: "message", Data: msg})
-	a.notify(ctx, q.InternID, "question", u.Name+" ответил на вопрос", "/chat")
+	a.notify(ctx, q.InternID, "question", u.Name+" ответил(а) на вопрос", "/chat")
+	// остальные, кто мог ответить, видят, что вопрос закрыт
+	for _, id := range append([]string{intern.LeadID}, intern.Mentors()...) {
+		if id != "" && id != u.ID {
+			a.hub.Publish(id, events.Update{Type: "question", Data: q})
+		}
+	}
 	if act, err := a.store.ActionByExternalID(ctx, q.ID); err == nil {
 		act.Status, act.UpdatedAt = domain.ActionApproved, now
-		act.Result = map[string]any{"id": q.ID, "status": "answered", "answer": answer}
+		act.Result = map[string]any{"id": q.ID, "status": "answered", "answer": answer, "mentor": u.Name}
 		_ = a.store.SaveAction(ctx, act)
 		a.hub.Publish(q.InternID, events.Update{Type: "action", Data: act})
 	}
 	if q.AddToFAQ {
-		f := domain.FAQEntry{ID: q.ID, Team: u.Team, Question: q.Text, Answer: answer, AuthorID: u.ID, CreatedAt: now}
+		f := domain.FAQEntry{ID: q.ID, Team: intern.Team, Question: q.Text, Answer: answer, AuthorID: u.ID, CreatedAt: now}
 		if err := a.store.AddFAQ(ctx, f); err == nil {
 			a.kb.AddFAQ(f)
 		}
@@ -298,10 +344,8 @@ func (a *App) Team(ctx context.Context, viewer domain.User) ([]InternSummary, er
 			}
 		}
 		s := InternSummary{User: u, Day: p.Day, Percent: p.Percent, Done: p.Done, Total: p.Total, Overdue: p.Overdue, OpenQuestions: open}
-		goals, _ := a.store.Goals(ctx, u.ID)
-		stepDone := a.stepDoneMap(ctx, u.ID)
+		goals, _ := a.internGoals(ctx, u)
 		for _, g := range goals {
-			g = withProgress(g, stepDone)
 			s.GoalsTotal++
 			if g.Status == domain.GoalDone {
 				s.GoalsDone++
@@ -340,9 +384,7 @@ func (a *App) TeamBriefs(ctx context.Context, viewer domain.User) ([]agent.Inter
 		b := agent.InternBrief{ID: r.User.ID, Name: r.User.Name, Team: r.User.TeamName, Day: r.Day, Percent: r.Percent, Done: r.Done,
 			Total: r.Total, Overdue: r.Overdue, NextStep: r.NextStep, OpenQuestions: r.OpenQuestions, GoalsDone: r.GoalsDone,
 			GoalsTotal: r.GoalsTotal, Program: r.TemplateName, QuizzesPassed: r.QuizzesPassed, QuizzesFailed: r.QuizzesFailed}
-		if m, ok := a.userByID(ctx, r.User.MentorID); ok {
-			b.Mentor = m.Name
-		}
+		b.Mentor = a.mentorNames(ctx, r.User)
 		out = append(out, b)
 	}
 	return out, nil

@@ -25,7 +25,7 @@ import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
 import { navFor, Shell } from './Shell';
-import { DeleteButton, InternRequests, Team } from './Team';
+import { DeleteButton, InternRequests, MentorsPanel, Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
 // В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
@@ -98,7 +98,9 @@ function seeded() {
     { id: 't2', title: 'Сделать MR', done: false },
   ];
   const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 50, tasks, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
-  qc.setQueryData(keys.goals(), { goals: [goal, { ...goal, id: 'g2', title: 'Экватор', status: 'done', progress: 100, note: undefined }] });
+  const stageGoal = { ...goal, id: 'plan-w1', title: 'Пройти этап «1 неделя»', metric: 'Выполнены все шаги этапа', auto: true, progress: 50, note: undefined,
+    tasks: [{ id: 's1', title: 'Получи доступ к Stash', stepId: 's1', done: true }, { id: 's2', title: 'Настрой avito-cli', stepId: 's2', done: false }] };
+  qc.setQueryData(keys.goals(), { goals: [stageGoal, goal, { ...goal, id: 'g2', title: 'Экватор', status: 'done', progress: 100, note: undefined }] });
   qc.setQueryData(keys.goals('u-anna'), { goals: [] });
   const internCard = (extra = {}) => ({
     user: anna, day: 4, percent: 33, done: 1, total: 3, overdue: 1, nextStep: 'Stash', openQuestions: 1, goalsDone: 1, goalsTotal: 2,
@@ -118,9 +120,10 @@ function seeded() {
     ],
     questions: [
       { id: 'q_1', text: 'Где тестовый стенд?', status: 'open', mentorName: 'Олег Кузнецов', createdAt: '2026-11-11T11:00:00Z' },
-      { id: 'q_2', text: 'Где логи?', status: 'answered', answer: 'В Observer', createdAt: '2026-11-10T11:00:00Z' },
+      { id: 'q_2', text: 'Где логи?', status: 'answered', answer: 'В Observer', answeredBy: 'Мария Волкова', createdAt: '2026-11-10T11:00:00Z' },
     ],
     canDelete: true,
+    canAnswer: true,
   });
   qc.setQueryData(['quizRun', 'quiz-dayoff'], qc.getQueryData(keys.quiz('quiz-dayoff')));
   return qc;
@@ -201,12 +204,16 @@ test('plan and today panel', () => {
   assert.match(html(<PlanView />), /1 неделя/);
   const lead = html(<PlanView internId="u-anna" />);
   assert.match(lead, /Анна Смирнова/);
-  assert.match(lead, /Поставьте стажёру/);
+  assert.match(lead, /Можно добавить свою цель/);
   assert.match(lead, /\+ цель/);
   const own = html(<PlanView />);
   assert.match(own, /Цели стажировки/);
   assert.match(own, /Критерий успеха: MR выкачен на staging/);
-  assert.match(own, /1 из 2 выполнено/);
+  assert.match(own, /1 из 3 выполнено/);
+  // цели этапов — из плана, шкала заполняется по шагам
+  assert.match(own, /Пройти этап «1 неделя»/);
+  assert.match(own, /1 из 2 шагов/);
+  assert.match(own, /Цели, поставленные вручную/);
   assert.match(own, /1 из 2 задач/);
   assert.match(own, /шаг плана/);
   assert.match(own, /50%/);
@@ -214,7 +221,7 @@ test('plan and today panel', () => {
   assert.match(own, /жду ревью/);
   const noGoals = seeded();
   noGoals.setQueryData(keys.goals(), { goals: [] });
-  assert.match(html(<PlanView />, noGoals), /согласует руководитель/);
+  assert.match(html(<PlanView />, noGoals), /появятся вместе с планом/);
   assert.match(html(<PlanView />, makeQueryClient()), /Загружаю план/);
   const today = html(<TodayPanel />);
   assert.match(today, /день стажировки/);
@@ -270,6 +277,7 @@ test('mentor and lead screens', () => {
   useUi.getState().go('team', { internId: 'u-anna' });
   const det = html(<Team />);
   assert.match(det, /Все стажёры/);
+  assert.match(det, /Наставники:/);
   assert.match(det, /Заявки стажёра/);
   assert.match(det, /1 не согласовано/);
   assert.match(det, /ждёт вашего решения/);
@@ -617,9 +625,11 @@ test('admin: nav, service, all employees; reject with reason; requests inline', 
   assert.doesNotMatch(html(<RejectForm kind="access" reason="Хватит чтения" onReason={() => undefined} pending={false} onSubmit={() => undefined} onCancel={() => undefined} />), /disabled=""[^>]*>Отказать/);
   const inline = html(<InternRequests internId="u-anna" compact />);
   assert.match(inline, /Вопросы наставнику/);
+  // наставник, руководитель и администратор отвечают прямо здесь
+  assert.match(inline, /Ответ стажёру/);
   assert.match(inline, /Где тестовый стенд\?/);
   assert.match(inline, /ждёт ответа/);
-  assert.match(inline, /Ответ: В Observer/);
+  assert.match(inline, /Ответ \(Мария Волкова\): В Observer/);
   assert.equal((inline.match(/>Удалить</g) ?? []).length, 4);
   const ro = seeded();
   const cur = ro.getQueryData<Record<string, unknown>>(keys.internRequests('u-anna'))!;
@@ -628,4 +638,21 @@ test('admin: nav, service, all employees; reject with reason; requests inline', 
   assert.match(html(<DeleteButton what="заявку" pending={false} onConfirm={() => undefined} />), /aria-label="Удалить заявку"/);
   assert.match(inline, /intern-requests compact/);
   assert.match(inline, />Отказать</);
+});
+
+test('mentors panel: several mentors, lead edits', () => {
+  const qc = seeded();
+  qc.setQueryData(keys.me, { user: maria, perms: ['approvals'] });
+  const intern = { ...anna, mentorId: 'u-oleg', mentorIds: ['u-oleg', 'u-pavel'], leadId: 'u-maria' };
+  const out = html(<MentorsPanel intern={intern} names={['Олег Кузнецов', 'Павел Егоров']} />, qc);
+  assert.match(out, /Олег Кузнецов/);
+  assert.match(out, /Павел Егоров/);
+  assert.match(out, /основной/);
+  assert.match(out, /Убрать наставника/);
+  const ro = seeded();
+  ro.setQueryData(keys.me, { user: oleg, perms: [] });
+  const view = html(<MentorsPanel intern={intern} names={['Олег Кузнецов', 'Павел Егоров']} />, ro);
+  assert.doesNotMatch(view, /Убрать наставника|Добавить наставника/);
+  assert.ok(navFor('lead', new Set()).some((n) => n.label === 'Вопросы стажёров'));
+  assert.ok(navFor('admin', new Set(['admin'])).some((n) => n.label === 'Вопросы стажёров'));
 });

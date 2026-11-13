@@ -349,8 +349,16 @@ func TestMentorQuestionAndFAQ(t *testing.T) {
 		t.Fatal("intern inbox")
 	}
 	maria := e.login("maria")
-	if code := maria.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": "x y"}, nil); code != 403 {
+	if code := e.login("sergey").do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": "x y"}, nil); code != 403 {
+		t.Fatal("foreign lead answer")
+	}
+	if code := e.login("dmitry").do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": "x y"}, nil); code != 403 {
 		t.Fatal("foreign mentor answer")
+	}
+	// руководитель стажёра видит вопрос во входящих
+	var leadInbox struct{ Questions []domain.Question }
+	if maria.do("GET", "/api/inbox", nil, &leadInbox); len(leadInbox.Questions) != 1 || leadInbox.Questions[0].InternName != "Анна Смирнова" {
+		t.Fatalf("lead inbox: %+v", leadInbox)
 	}
 	if code := oleg.do("POST", "/api/inbox/"+inbox.Questions[0].ID+"/answer", map[string]any{"answer": ""}, nil); code != 400 {
 		t.Fatal("empty answer")
@@ -481,7 +489,7 @@ func TestAuthAndValidation(t *testing.T) {
 	}
 	var du struct{ Users []domain.User }
 	c.do("GET", "/api/auth/demo-users", nil, &du)
-	if len(du.Users) != 9 {
+	if len(du.Users) != 10 {
 		t.Fatal("demo users")
 	}
 	anna := e.login("anna")
@@ -762,8 +770,17 @@ func TestCronReminders(t *testing.T) {
 func TestGoals(t *testing.T) {
 	e := newTestEnv(t, allOn(), "")
 	anna, maria, oleg, ivan := e.login("anna"), e.login("maria"), e.login("oleg"), e.login("ivan")
-	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "пока не поставлены") {
-		t.Fatalf("no goals: %s", m.Text)
+	// цели этапов создаются из плана сами: по одной на этап, задачи — шаги этапа
+	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "Пройти этап «1 неделя»") {
+		t.Fatalf("plan goals: %s", m.Text)
+	}
+	var pl onboarding.Plan
+	anna.do("GET", "/api/plan", nil, &pl)
+	stages := 0
+	for _, per := range pl.Periods {
+		if len(per.Steps) > 0 {
+			stages++
+		}
 	}
 	in := map[string]any{"internId": "u-anna", "title": "Закрыть первую задачу SEARCH-101", "metric": "MR прошёл ревью и выкачен на staging", "due": "2026-11-24",
 		"tasks": []map[string]string{{"stepId": "w1-avito-cli"}, {"title": "Сделать MR"}}}
@@ -799,10 +816,10 @@ func TestGoals(t *testing.T) {
 	}
 	var list struct{ Goals []domain.Goal }
 	anna.do("GET", "/api/goals", nil, &list)
-	if len(list.Goals) != 2 {
+	if len(manual(list.Goals)) != 2 || len(list.Goals) != stages+2 || !list.Goals[0].Auto || len(list.Goals[0].Tasks) != pl.Periods[0].Total {
 		t.Fatalf("list: %+v", list)
 	}
-	if code := maria.do("GET", "/api/goals?internId=u-anna", nil, &list); code != 200 || len(list.Goals) != 2 {
+	if code := maria.do("GET", "/api/goals?internId=u-anna", nil, &list); code != 200 || len(manual(list.Goals)) != 2 {
 		t.Fatal("lead view")
 	}
 	if code := ivan.do("GET", "/api/goals?internId=u-anna", nil, nil); code != 403 {
@@ -831,7 +848,7 @@ func TestGoals(t *testing.T) {
 	// прогресс считается сам: шаг плана закрыт — 50%
 	anna.do("PATCH", "/api/plan/steps/w1-avito-cli", map[string]string{"status": "done"}, nil)
 	anna.do("GET", "/api/goals", nil, &list)
-	if g := list.Goals[0]; g.Progress != 50 || g.Status != domain.GoalInProgress || !g.Tasks[0].Done {
+	if g := manual(list.Goals)[0]; g.Progress != 50 || g.Status != domain.GoalInProgress || !g.Tasks[0].Done {
 		t.Fatalf("auto progress: %+v", g)
 	}
 	// задачу-шаг нельзя отметить в цели, свою — можно
@@ -867,7 +884,7 @@ func TestGoals(t *testing.T) {
 	anna.do("PATCH", "/api/goals/"+id+"/tasks/"+g2.Goal.Tasks[2].ID, map[string]bool{"done": true}, &out)
 	var team struct{ Interns []app.InternSummary }
 	maria.do("GET", "/api/team", nil, &team)
-	if team.Interns[0].GoalsTotal != 2 || team.Interns[0].GoalsDone != 1 {
+	if team.Interns[0].GoalsTotal != stages+2 || team.Interns[0].GoalsDone != 1 {
 		t.Fatalf("team goals: %+v", team.Interns[0])
 	}
 	if m, _ := anna.ask("какие у меня цели на стажировку?"); !strings.Contains(m.Text, "SEARCH-101") || !strings.Contains(m.Text, "выполнена") {
@@ -879,7 +896,7 @@ func TestGoals(t *testing.T) {
 		t.Fatal(err)
 	}
 	ivan.do("GET", "/api/goals", nil, &list)
-	if len(list.Goals) != 1 {
+	if len(manual(list.Goals)) != 1 {
 		t.Fatal("seed ivan")
 	}
 	ivan.do("GET", "/api/plan", nil, &p)
@@ -887,7 +904,38 @@ func TestGoals(t *testing.T) {
 		t.Fatal("seed marks w1-goals")
 	}
 	anna.do("GET", "/api/goals", nil, &list)
-	if len(list.Goals) != 2 {
+	if len(manual(list.Goals)) != 2 {
 		t.Fatal("seed must not touch anna")
 	}
+	// цель этапа: шкала заполняется по плану, при закрытии последнего шага — уведомление руководителю
+	anna.do("GET", "/api/plan", nil, &pl)
+	first := pl.Periods[0]
+	for _, st := range first.Steps {
+		if st.Status != domain.StepDone {
+			if code := maria.do("PATCH", "/api/plan/steps/"+st.ID, map[string]string{"status": "done", "internId": "u-anna"}, nil); code != 200 {
+				t.Fatalf("step %s: %d", st.ID, code)
+			}
+		}
+	}
+	anna.do("GET", "/api/goals", nil, &list)
+	if g := list.Goals[0]; !g.Auto || g.Progress != 100 || g.Status != domain.GoalDone {
+		t.Fatalf("stage goal: %+v", g)
+	}
+	if code := maria.do("POST", "/api/goals/"+list.Goals[0].ID+"/tasks", map[string]string{"title": "Ещё задача"}, nil); code != 404 {
+		t.Fatal("tasks of plan goal follow the plan")
+	}
+	maria.do("GET", "/api/notifications", nil, &n)
+	if !strings.Contains(n.Notifications[0].Text, "пройти этап «"+first.Name+"»") {
+		t.Fatalf("stage done notification: %+v", n.Notifications[0])
+	}
+}
+
+func manual(gs []domain.Goal) []domain.Goal {
+	var out []domain.Goal
+	for _, g := range gs {
+		if !g.Auto {
+			out = append(out, g)
+		}
+	}
+	return out
 }

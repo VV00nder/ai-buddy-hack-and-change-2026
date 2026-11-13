@@ -76,10 +76,13 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
           requests: S.InternRequest.array(),
           questions: S.InternQuestion.array().nullish().transform((v) => v ?? []),
           canDelete: z.boolean().optional().default(false),
+          canAnswer: z.boolean().optional().default(false),
         }),
       ),
     deleteRequest: (internId: string, id: string) =>
       call('DELETE', `/api/team/${encodeURIComponent(internId)}/requests/${encodeURIComponent(id)}`, ok),
+    setMentors: (internId: string, mentorIds: string[]) =>
+      call('PUT', `/api/team/${encodeURIComponent(internId)}/mentors`, obj({ user: S.User }), { mentorIds }),
     deleteQuestion: (internId: string, id: string) =>
       call('DELETE', `/api/team/${encodeURIComponent(internId)}/questions/${encodeURIComponent(id)}`, ok),
     reminders: () => call('GET', '/api/reminders', obj({ reminders: S.Reminder.array() })),

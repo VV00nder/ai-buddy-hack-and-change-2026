@@ -43,6 +43,7 @@ const navByRole: Record<User['role'], NavItem[]> = {
   // заявки стажёров руководитель решает внутри «Стажёров» — отдельной вкладки нет
   lead: [
     { view: 'team', label: 'Стажёры' },
+    { view: 'inbox', label: 'Вопросы стажёров' },
     { view: 'programs', label: 'Шаблоны обучения' },
     { view: 'rights', label: 'Отдел и права' },
     { view: 'insights', label: 'Польза' },
@@ -58,6 +59,7 @@ const navByRole: Record<User['role'], NavItem[]> = {
   newcomer: [],
   admin: [
     { view: 'team', label: 'Стажёры' },
+    { view: 'inbox', label: 'Вопросы стажёров' },
     { view: 'rights', label: 'Сотрудники и права' },
     { view: 'service', label: 'Сервис' },
     { view: 'programs', label: 'Шаблоны обучения' },

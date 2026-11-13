@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api/client';
-import type { InternCard, InternRequest, Reminder } from '../api/schemas';
-import { keys } from '../hooks/queries';
+import type { InternCard, InternRequest, Reminder, User } from '../api/schemas';
+import { keys, useMe } from '../hooks/queries';
 import { dayMonth, initials, relative, remindAt, remindChoices, time, waited } from '../lib/format';
 import { useUi } from '../store/ui';
 import { ApprovalRow } from './Approvals';
+import { AnswerForm } from './Inbox';
 import { PlanView } from './PlanView';
 import { ProgramPanel } from './Programs';
 import { QuizResultsPanel } from './QuizResults';
@@ -28,6 +29,7 @@ export function Team() {
             ))}
           </ul>
         )}
+        {card && <MentorsPanel intern={card.user} names={card.mentorName ? card.mentorName.split(', ') : []} />}
         <InternRequests internId={internId} />
         <ProgramPanel internId={internId} internName={name} />
         <QuizResultsPanel internId={internId} />
@@ -251,7 +253,7 @@ export function InternRequests({ internId, compact = false }: { internId: string
   });
   if (q.isPending) return null;
   if (q.isError) return <p className="error small">Заявки не загрузились: {q.error.message}</p>;
-  const { canDelete, questions } = q.data;
+  const { canDelete, canAnswer, questions } = q.data;
   const list = [...q.data.requests].sort((a, b) => Number(b.status === 'submitted') - Number(a.status === 'submitted'));
   const open = list.filter((r) => r.status === 'submitted').length;
   return (
@@ -296,7 +298,18 @@ export function InternRequests({ internId, compact = false }: { internId: string
                   {dayMonth(x.createdAt)}, {time(x.createdAt)}
                   {x.mentorName && ` · ${x.mentorName}`}
                 </span>
-                {x.answer && <span className="small">Ответ: {x.answer}</span>}
+                {x.answer && (
+                  <span className="small">
+                    Ответ{x.answeredBy && ` (${x.answeredBy})`}: {x.answer}
+                  </span>
+                )}
+                {canAnswer && x.status === 'open' && (
+                  <AnswerForm
+                    q={{ id: x.id, internId, mentorId: '', text: x.text, status: 'open', createdAt: x.createdAt }}
+                    who={x.mentorName ? `Наставники: ${x.mentorName}` : 'Вопрос стажёра'}
+                    compact
+                  />
+                )}
                 {canDelete && <DeleteButton what="вопрос" pending={delQ.isPending} onConfirm={() => delQ.mutate(x.id)} />}
               </li>
             ))}
@@ -375,6 +388,65 @@ export function Reminders({ list }: { list: Reminder[] }) {
         </ul>
       )}
       {list.some((r) => r.sent) && <p className="small muted">Последнее сработало {relative(list.filter((r) => r.sent).at(-1)!.at)}</p>}
+    </section>
+  );
+}
+
+/** Наставники стажёра: руководитель стажёра и администратор назначают одного или нескольких. */
+export function MentorsPanel({ intern, names = [] }: { intern: User; names?: string[] }) {
+  const qc = useQueryClient();
+  const toast = useUi((s) => s.toast);
+  const me = useMe().data?.user;
+  const canEdit = !!me && (me.role === 'admin' || (me.role === 'lead' && intern.leadId === me.id));
+  const dep = useQuery({ queryKey: keys.department, queryFn: api.department, enabled: canEdit });
+  const ids = [intern.mentorId, ...(intern.mentorIds ?? [])].filter((x, i, a): x is string => !!x && a.indexOf(x) === i);
+  const people = new Map((dep.data?.mentors ?? []).map((m) => [m.id, m.name]));
+  ids.forEach((id, i) => names[i] && !people.has(id) && people.set(id, names[i]));
+  const [add, setAdd] = useState('');
+  const m = useMutation({
+    mutationFn: (next: string[]) => api.setMentors(intern.id, next),
+    onSuccess: () => {
+      setAdd('');
+      toast('Наставники обновлены — стажёр и наставники получили уведомление');
+      void qc.invalidateQueries({ queryKey: keys.dashboard });
+      void qc.invalidateQueries({ queryKey: keys.team });
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
+  const candidates = (dep.data?.mentors ?? []).filter((x) => !ids.includes(x.id));
+  return (
+    <section className="mentors-panel" aria-label="Наставники стажёра">
+      <span className="small muted">Наставники:</span>
+      <ul className="mentor-chips">
+        {ids.map((id, i) => (
+          <li key={id} className="mentor-chip">
+            <span>{people.get(id) ?? id}</span>
+            {i === 0 && ids.length > 1 && <span className="small muted"> · основной</span>}
+            {canEdit && ids.length > 1 && (
+              <button className="link small" aria-label={`Убрать наставника ${people.get(id) ?? id}`} disabled={m.isPending} onClick={() => m.mutate(ids.filter((x) => x !== id))}>
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+        {ids.length === 0 && <li className="small muted">не назначены</li>}
+      </ul>
+      {canEdit && candidates.length === 0 && dep.isSuccess && <span className="small muted">других наставников в отделе нет</span>}
+      {canEdit && candidates.length > 0 && (
+        <span className="mentor-add">
+          <label className="sr-only" htmlFor={`add-mentor-${intern.id}`}>Добавить наставника</label>
+          <select id={`add-mentor-${intern.id}`} value={add} onChange={(e) => setAdd(e.target.value)}>
+            <option value="">Добавить наставника…</option>
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {me?.role === 'admin' && c.teamName ? ` — ${c.teamName}` : ''}
+              </option>
+            ))}
+          </select>
+          <button className="btn ghost small" disabled={!add || m.isPending} onClick={() => m.mutate([...ids, add])}>Добавить</button>
+        </span>
+      )}
     </section>
   );
 }

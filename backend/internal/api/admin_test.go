@@ -60,7 +60,7 @@ func TestAdmin(t *testing.T) {
 	if code := admin.do("GET", "/api/department", nil, &dep); code != 200 || len(dep.Members) < 8 {
 		t.Fatalf("department: %d %d", code, len(dep.Members))
 	}
-	if len(dep.Teams) != 3 || len(dep.Mentors) != 2 {
+	if len(dep.Teams) != 3 || len(dep.Mentors) != 3 {
 		t.Fatalf("admin sees all teams (incl. without lead) and mentors: %+v %+v", dep.Teams, dep.Mentors)
 	}
 	var errResp struct{ Message string }

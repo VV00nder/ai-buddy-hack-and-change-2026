@@ -214,12 +214,12 @@ func (s *Service) Transfer(c identity.Claims, userID, teamID string) (map[string
 	oldLead := p.LeadID
 	p.Team, p.TeamName, p.LeadID = team.ID, team.Name, newLead.ID
 	if p.Role == domain.RoleIntern {
-		p.MentorID = ""
+		p.MentorID, p.MentorIDs = "", nil
 		if m := s.mentorOf(team.ID); m != nil {
 			p.MentorID = m.ID
 		}
 	} else {
-		p.MentorID = ""
+		p.MentorID, p.MentorIDs = "", nil
 	}
 	delete(s.deputies[oldLead], p.ID) // заместителем прежнего руководителя он больше не является
 	moved := 0
@@ -282,6 +282,7 @@ func (s *Service) UseStateFile(path string) error {
 		saved := st.Users[i]
 		if cur, ok := s.users[saved.ID]; ok { // тестовый сотрудник: применяем перевод
 			cur.Role, cur.Team, cur.TeamName, cur.LeadID, cur.MentorID = saved.Role, saved.Team, saved.TeamName, saved.LeadID, saved.MentorID
+			cur.MentorIDs = saved.MentorIDs
 			continue
 		}
 		p := saved

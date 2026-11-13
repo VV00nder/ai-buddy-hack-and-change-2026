@@ -55,7 +55,7 @@ func TestRegistration(t *testing.T) {
 	}
 	var dep app.Department
 	maria.do("GET", "/api/department", nil, &dep)
-	if len(dep.Newcomers) != 1 || len(dep.Mentors) != 1 || dep.Mentors[0].ID != "u-oleg" {
+	if len(dep.Newcomers) != 1 || len(dep.Mentors) != 2 || dep.Mentors[0].ID != "u-oleg" {
 		t.Fatalf("department newcomers: %+v", dep)
 	}
 	if code := e.login("oleg").do("POST", "/api/department/"+reg.User.ID+"/assign", map[string]string{"role": "intern"}, nil); code != 403 {
@@ -123,7 +123,7 @@ func TestTransfer(t *testing.T) {
 	if code := oleg.do("GET", "/api/department", nil, nil); code != 403 {
 		t.Fatal("mentor department")
 	}
-	if code := maria.do("GET", "/api/department", nil, &dep); code != 200 || len(dep.Members) != 3 || len(dep.Teams) != 2 {
+	if code := maria.do("GET", "/api/department", nil, &dep); code != 200 || len(dep.Members) != 4 || len(dep.Teams) != 2 {
 		t.Fatalf("department: %d %+v", code, dep)
 	}
 	// заявка Анны ждёт Марию — после перевода перейдёт Сергею
@@ -137,7 +137,7 @@ func TestTransfer(t *testing.T) {
 	if code := oleg.do("POST", "/api/department/u-anna/transfer", map[string]string{"team": "delivery"}, nil); code != 403 {
 		t.Fatal("mentor transfers")
 	}
-	if code := maria.do("POST", "/api/department/u-anna/transfer", map[string]string{"team": "delivery"}, &dep); code != 200 || len(dep.Members) != 2 {
+	if code := maria.do("POST", "/api/department/u-anna/transfer", map[string]string{"team": "delivery"}, &dep); code != 200 || len(dep.Members) != 3 {
 		t.Fatalf("transfer: %d %+v", code, dep)
 	}
 	// у Анны новый отдел, руководитель и наставник — без повторного входа

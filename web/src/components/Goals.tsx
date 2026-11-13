@@ -14,6 +14,8 @@ export function Goals({ internId, canAdd, steps = [] }: { internId?: string; can
   const q = useQuery({ queryKey: keys.goals(internId), queryFn: () => api.goals(internId) });
   const goals = q.data?.goals ?? [];
   const [adding, setAdding] = useState(false);
+  const stages = goals.filter((g) => g.auto);
+  const own = goals.filter((g) => !g.auto);
   return (
     <section className="goals" aria-labelledby="goals-title">
       <div className="goals-head">
@@ -24,18 +26,58 @@ export function Goals({ internId, canAdd, steps = [] }: { internId?: string; can
         )}
       </div>
       {q.isError && <p className="error">Цели не загрузились</p>}
-      {q.isSuccess && goals.length === 0 && !adding && (
-        <p className="muted small">
-          {canAdd ? 'Поставьте стажёру 2–3 измеримые цели: каждая состоит из задач, процент считается сам.' : 'Цели пока не поставлены — их согласует руководитель на первой неделе.'}
-        </p>
+      {stages.length > 0 && (
+        <>
+          <p className="small muted">Этапы плана — цели создаются из плана сами, шкала заполняется по мере выполнения шагов.</p>
+          <ul className="goal-list stage-goals">
+            {stages.map((g) => (
+              <StageGoal key={g.id} g={g} />
+            ))}
+          </ul>
+        </>
+      )}
+      {q.isSuccess && goals.length === 0 && !canAdd && <p className="muted small">Целей пока нет — они появятся вместе с планом адаптации.</p>}
+      {own.length > 0 && <p className="small muted">Цели, поставленные вручную:</p>}
+      {q.isSuccess && own.length === 0 && canAdd && !adding && (
+        <p className="muted small">Можно добавить свою цель: из шагов плана и своих задач — процент считается сам.</p>
       )}
       <ul className="goal-list">
-        {goals.map((g) => (
+        {own.map((g) => (
           <GoalRow key={g.id} g={g} internId={internId} canAdd={canAdd} steps={steps} />
         ))}
       </ul>
       {canAdd && internId && adding && <AddGoal internId={internId} steps={steps} onDone={() => setAdding(false)} />}
     </section>
+  );
+}
+
+/** Цель этапа плана: компактно — шкала и число шагов, шаги раскрываются. */
+export function StageGoal({ g }: { g: Goal }) {
+  const done = g.tasks.filter((t) => t.done).length;
+  return (
+    <li className={`goal stage-goal goal-${g.status}`}>
+      <details>
+        <summary>
+          <span className="goal-title">{g.title}</span>
+          <span className="progress-line">
+            <span className="progress" role="progressbar" aria-valuenow={g.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Прогресс: ${g.title}`}>
+              <span style={{ width: `${g.progress}%` }} />
+            </span>
+            <span className="small num pct">{g.progress}%</span>
+          </span>
+          <span className="small muted">
+            {done} из {g.tasks.length} шагов{g.due && ` · до ${dayMonth(g.due)}`}
+          </span>
+        </summary>
+        <ul className="goal-tasks">
+          {g.tasks.map((t) => (
+            <li key={t.id} className={t.done ? 'done' : ''}>
+              <span aria-hidden="true">{t.done ? '✓' : '○'}</span> <span>{t.title}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </li>
   );
 }
 

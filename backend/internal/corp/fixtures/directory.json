@@ -105,6 +105,16 @@
       "handle": "@pavel-devops"
     },
     {
+      "id": "u-yuri",
+      "login": "yuri",
+      "name": "Юрий Ларин",
+      "role": "mentor",
+      "team": "search",
+      "leadId": "u-maria",
+      "startOffsetDays": -900,
+      "handle": "@yuri-larin"
+    },
+    {
       "id": "u-admin",
       "login": "admin",
       "name": "Ирина Белова",

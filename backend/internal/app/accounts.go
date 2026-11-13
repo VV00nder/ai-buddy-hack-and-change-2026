@@ -287,3 +287,45 @@ func (a *App) ResetPassword(ctx context.Context, s kv.Session, userID, password 
 	a.Track(ctx, s.User.ID, "password_reset", map[string]any{"user": userID})
 	return nil
 }
+
+// CanAnswer — может ли пользователь отвечать на вопросы стажёра.
+func (a *App) CanAnswer(ctx context.Context, u domain.User, internID string) bool {
+	intern, ok := a.userByID(ctx, internID)
+	return ok && canAnswer(u, intern)
+}
+
+// SetMentors — руководитель стажёра или администратор назначает стажёру наставников.
+func (a *App) SetMentors(ctx context.Context, s kv.Session, internID string, mentorIDs []string) (domain.User, error) {
+	before, ok := a.userByID(ctx, internID)
+	if !ok || before.Role != domain.RoleIntern {
+		return domain.User{}, ErrNotFound
+	}
+	if !canManageIntern(s.User, before) {
+		return domain.User{}, ErrForbidden
+	}
+	_, err := a.corp.Call(ctx, s.Token, "directory_set_mentors", map[string]any{"user_id": internID, "mentor_ids": mentorIDs})
+	var ce *mcp.CallError
+	if errors.As(err, &ce) {
+		if ce.Code == "forbidden" {
+			return domain.User{}, ErrForbidden
+		}
+		return domain.User{}, invalid("%s", ce.Message)
+	}
+	if err != nil {
+		return domain.User{}, ErrUnavailable
+	}
+	a.invalidateUsers()
+	u, ok := a.userByID(ctx, internID)
+	if !ok {
+		return u, ErrNotFound
+	}
+	a.notify(ctx, u.ID, "team", fmt.Sprintf("%s назначил(а) вам наставников: %s", s.User.Name, a.mentorNames(ctx, u)), "/")
+	for _, id := range u.Mentors() {
+		if !before.HasMentor(id) {
+			a.notify(ctx, id, "team", "Вы — наставник стажёра: "+u.Name, "/team")
+		}
+	}
+	a.Track(ctx, s.User.ID, "mentors_changed", map[string]any{"user": u.ID, "count": len(u.Mentors())})
+	a.publishPlan(ctx, u)
+	return u, nil
+}
