@@ -145,7 +145,7 @@ func (s *Service) RequestAccess(c identity.Claims, in AccessInput) (map[string]a
 		out["status"] = "valid"
 		return out, nil
 	}
-	r.ID = s.nextID("ACC")
+	r.ID = s.nextRequestID("ACC")
 	if sys.Approval == "auto" {
 		now := s.now()
 		r.Status, r.DecidedAt = "granted", &now

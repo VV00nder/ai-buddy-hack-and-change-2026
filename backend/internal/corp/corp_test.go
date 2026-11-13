@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -630,5 +631,14 @@ func TestStateFile(t *testing.T) {
 	}
 	if err := newSvc(t).UseStateFile(t.TempDir()); err == nil {
 		t.Fatal("dir as state")
+	}
+}
+
+func TestRequestIDsUniqueAcrossRestarts(t *testing.T) {
+	a, b := newSvc(t), newSvc(t)
+	ra, _ := a.CreateAbsence(claims(a, "anna"), AbsenceInput{DateFrom: "2026-11-16"})
+	rb, _ := b.CreateAbsence(claims(b, "anna"), AbsenceInput{DateFrom: "2026-11-16"})
+	if ra["id"] == rb["id"] || !strings.HasPrefix(ra["id"].(string), "ABS-") {
+		t.Fatalf("ids: %v %v", ra["id"], rb["id"])
 	}
 }

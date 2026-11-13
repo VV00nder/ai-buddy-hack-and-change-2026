@@ -164,7 +164,7 @@ func (p *Postgres) Action(ctx context.Context, id string) (domain.Action, error)
 }
 
 func (p *Postgres) ActionByExternalID(ctx context.Context, ext string) (domain.Action, error) {
-	return getOne[domain.Action](ctx, p.db, `SELECT data FROM actions WHERE external_id=$1 AND external_id<>'' LIMIT 1`, ext)
+	return getOne[domain.Action](ctx, p.db, `SELECT data FROM actions WHERE external_id=$1 AND external_id<>'' ORDER BY created_at DESC LIMIT 1`, ext)
 }
 
 func (p *Postgres) Actions(ctx context.Context, userID string) ([]domain.Action, error) {

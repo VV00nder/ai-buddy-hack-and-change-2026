@@ -110,12 +110,18 @@ func (m *Memory) Action(_ context.Context, id string) (domain.Action, error) {
 func (m *Memory) ActionByExternalID(_ context.Context, ext string) (domain.Action, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	// при совпадении номеров (например, после перезапуска внешнего сервиса) — самая свежая заявка
+	var found *domain.Action
 	for _, a := range m.actions {
-		if ext != "" && a.ExternalID == ext {
-			return a, nil
+		if ext != "" && a.ExternalID == ext && (found == nil || a.CreatedAt.After(found.CreatedAt)) {
+			a := a
+			found = &a
 		}
 	}
-	return domain.Action{}, ErrNotFound
+	if found == nil {
+		return domain.Action{}, ErrNotFound
+	}
+	return *found, nil
 }
 
 func (m *Memory) Actions(_ context.Context, userID string) ([]domain.Action, error) {

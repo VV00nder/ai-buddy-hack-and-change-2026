@@ -120,6 +120,12 @@ func contract(t *testing.T, s Store) {
 	if e, _ := s.Events(ctx); len(e) != 1 || e[0].Props["k"] != "v" {
 		t.Fatal("events")
 	}
+	// одинаковый внешний номер у старой и новой заявки — берём новую
+	_ = s.SaveAction(ctx, domain.Action{ID: "old", UserID: "u1", ExternalID: "ABS-DUP", Status: domain.ActionSubmitted, CreatedAt: t0})
+	_ = s.SaveAction(ctx, domain.Action{ID: "new", UserID: "u1", ExternalID: "ABS-DUP", Status: domain.ActionSubmitted, CreatedAt: t0.Add(time.Hour)})
+	if a, err := s.ActionByExternalID(ctx, "ABS-DUP"); err != nil || a.ID != "new" {
+		t.Fatalf("newest by external id: %+v %v", a, err)
+	}
 	// записи произвольного вида
 	_ = s.PutRecord(ctx, "quiz", "b", []byte(`{"id":"b"}`))
 	_ = s.PutRecord(ctx, "quiz", "a", []byte(`{"id":"a"}`))

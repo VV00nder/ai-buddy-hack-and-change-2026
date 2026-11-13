@@ -127,7 +127,7 @@ func (s *Service) CreateAbsence(c identity.Claims, in AbsenceInput) (map[string]
 		out["status"] = "valid"
 		return out, nil
 	}
-	a.ID = s.nextID("ABS")
+	a.ID = s.nextRequestID("ABS")
 	s.absences = append(s.absences, a)
 	if a.Type == "day_off" {
 		s.balance[p.ID] -= days

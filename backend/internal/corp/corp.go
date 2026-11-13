@@ -5,7 +5,9 @@
 package corp
 
 import (
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -120,7 +122,9 @@ type Service struct {
 	creds map[string]cred
 	// stateFile — файл, где сохраняются регистрации и переводы (пусто — только в памяти).
 	stateFile string
-	seq       int
+	// run — метка запуска в номерах заявок.
+	run string
+	seq int
 	// Outage имитирует недоступность сервиса (для демонстрации обработки сбоев).
 	outage bool
 }
@@ -141,7 +145,7 @@ func New(now func() time.Time, loc *time.Location) (*Service, error) {
 	s := &Service{now: now, loc: loc, teams: map[string]Team{}, users: map[string]*Person{},
 		byLogin: map[string]*Person{}, balance: map[string]int{}, catalog: f.AccessCatalog,
 		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners, deputies: map[string]map[string]bool{},
-		order: append([]string{}, loginOrder...), creds: map[string]cred{}}
+		order: append([]string{}, loginOrder...), creds: map[string]cred{}, run: runTag()}
 	today := dayOf(now().In(loc))
 	for _, t := range f.Teams {
 		s.teams[t.ID] = t
@@ -209,4 +213,17 @@ func (s *Service) nextID(prefix string) string {
 	return fmt.Sprintf("%s-%04d", prefix, 1000+s.seq)
 }
 
+// nextRequestID — номер заявки, уникальный и после перезапуска сервиса:
+// заявки хранятся в памяти, а AI-buddy помнит их номера в своей базе.
+func (s *Service) nextRequestID(prefix string) string {
+	s.seq++
+	return fmt.Sprintf("%s-%s-%04d", prefix, s.run, 1000+s.seq)
+}
+
 func (s *Service) today() time.Time { return dayOf(s.now().In(s.loc)) }
+
+func runTag() string {
+	b := make([]byte, 2)
+	_, _ = rand.Read(b)
+	return strings.ToUpper(hex.EncodeToString(b))
+}
