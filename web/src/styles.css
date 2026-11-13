@@ -51,7 +51,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .small { font-size: 13px; }
 .center { text-align: center; }
 .error { color: var(--alert); }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
@@ -95,7 +95,10 @@ input, textarea { border: 1px solid var(--line); border-radius: var(--radius-s);
 textarea { resize: vertical; }
 
 /* Каркас */
-.shell { height: 100%; display: grid; grid-template-columns: 228px minmax(0, 1fr) 300px; }
+/* Прокручиваются только области внутри каркаса, а не вся страница: скрытые
+   подписи и подсказки с position:absolute остаются внутри своей области. */
+.shell { height: 100%; display: grid; grid-template-columns: 228px minmax(0, 1fr) 300px; overflow: hidden; }
+.rail, .main, .content, .today { position: relative; min-width: 0; min-height: 0; }
 .shell:not(.view-chat) { grid-template-columns: 228px minmax(0, 1fr); }
 .rail { border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; gap: 18px; background: var(--surface); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; padding: 0 6px; }
@@ -444,7 +447,8 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
   .rail { order: 2; flex-direction: row; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); gap: 0; }
   .install { font-size: 12px; padding: 5px 8px; }
   .rail .brand, .rail .me { display: none; }
-  .rail ul { display: flex; width: 100%; overflow-x: auto; }
+  .rail { overflow: hidden; }
+  .rail ul { display: flex; width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .rail li { flex: 1 0 auto; }
   .rail li button { text-align: center; font-size: 13px; padding: 10px 8px; }
   .rail li button.active { box-shadow: inset 0 -3px 0 var(--buddy); }

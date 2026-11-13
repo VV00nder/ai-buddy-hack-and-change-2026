@@ -227,6 +227,8 @@ page.once('dialog', (d) => void d.accept());
 await page.getByRole('button', { name: 'Назначить', exact: true }).click();
 await page.getByText('Программа «Стажёр-аналитик»', { exact: true }).waitFor();
 check('стажёру назначен шаблон «Стажёр-аналитик»', true);
+await page.evaluate(() => document.querySelector('.content').scrollTo(0, 1e6));
+check('страница не уходит ниже содержимого', await page.evaluate(() => document.scrollingElement.scrollHeight <= innerHeight + 1));
 await pause(1500);
 await logout();
 
