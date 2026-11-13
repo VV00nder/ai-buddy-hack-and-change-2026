@@ -175,9 +175,69 @@ await caption('Ответ наставника теперь в базе знан
 await ask('Где тестовый стенд поиска?');
 check('повторный вопрос закрыт без наставника', (await lastAssistant().innerText()).includes('search-staging'));
 await pause(1500);
+
+// 8. Обучение: отметка шагов из чата и тест после темы
+await caption('Шаги плана отмечаются прямо из чата: галочкой в панели «Сегодня» или словами', 2400);
+await page.locator('.today .mini-check[aria-checked="false"]').first().click();
+await page.locator('.today .mini-done').first().waitFor();
+check('шаг отмечен в панели «Сегодня»', (await page.locator('.today .mini-done').count()) >= 1);
+await ask('Я настроил avito-cli');
+check('шаг отмечен из чата', (await lastAssistant().innerText()).includes('Отметил шаг'));
+await caption('После темы — короткий тест. AI-buddy подбирает его по теме вопроса', 2200);
+await ask('Проверь мои знания по SSH-ключам');
+await lastAssistant().getByRole('button', { name: 'Пройти тест' }).click();
+await page.locator('.quiz-run legend').first().waitFor();
+const answersWeek1 = [1, 0, 1, 2, 0];
+for (const [i, j] of answersWeek1.entries()) {
+  await page.locator('.questions > li').nth(i).locator('.option').nth(j).click();
+  await pause(350);
+}
+await caption('Ответы проверяет сервер — правильные варианты не уходят в браузер', 2000);
+await page.getByRole('button', { name: 'Проверить ответы' }).click();
+await page.locator('.quiz-score').waitFor();
+check('тест сдан, шаг плана закрыт', (await page.locator('.quiz-score').innerText()).includes('Шаг плана отмечен'));
+await caption('Тест сдан: шаг плана закрылся сам, наставник получил уведомление с результатом', 2800);
 await logout();
 
-// 8. Польза
+// 9. Руководитель: права, инструкции, шаблоны обучения
+await caption('Руководитель передаёт часть полномочий: инструкции и тесты, согласование заявок', 2400);
+await loginAs('Мария Волкова');
+await page.getByRole('button', { name: 'Права', exact: true }).click();
+await page.getByRole('switch', { name: 'Согласование заявок: Елена Соколова' }).click();
+await page.getByText('Право выдано').waitFor();
+check('право на согласование выдано', await page.getByRole('switch', { name: 'Согласование заявок: Елена Соколова' }).isChecked());
+await pause(1200);
+await caption('Новая инструкция в папке команды — AI-buddy сразу отвечает по ней', 2200);
+await page.getByRole('button', { name: 'Инструкции', exact: true }).click();
+await page.getByRole('button', { name: 'Новая инструкция' }).click();
+await page.getByLabel('Название').fill('Как проходит релиз поиска');
+await page.getByLabel('Папка').fill('Процессы/Релизы');
+await page.locator('#doc-body').fill('Релизы поиска — по вторникам после зелёного CI.\n\n## Чек-лист\n1. Зелёный CI.\n2. Ревью наставника.\n3. Выкатка на staging и проверка дашборда.');
+await pause(1200);
+await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+await page.getByText('Инструкция команды').waitFor();
+check('инструкция в папке «Процессы / Релизы»', (await page.locator('.crumbs').innerText()).includes('Релизы'));
+await pause(1200);
+await caption('Шаблоны обучения: встроенные можно скопировать, назначить стажёру и настроить под него', 2400);
+await page.getByRole('button', { name: 'Стажёры', exact: true }).click();
+await page.locator('.team tbody tr').first().click();
+await page.locator('.program-panel').waitFor();
+await page.locator('#tpl-pick').selectOption({ label: 'Стажёр-аналитик' });
+page.once('dialog', (d) => void d.accept());
+await page.getByRole('button', { name: 'Назначить', exact: true }).click();
+await page.getByText('Программа «Стажёр-аналитик»', { exact: true }).waitFor();
+check('стажёру назначен шаблон «Стажёр-аналитик»', true);
+await pause(1500);
+await logout();
+
+await loginAs('Анна Смирнова');
+await caption('Анна сразу получает ответ по новой инструкции команды', 1800);
+await ask('Когда проходят релизы поиска?');
+check('ответ по новой инструкции', (await lastAssistant().innerText()).includes('вторник'));
+await pause(1500);
+await logout();
+
+// 10. Польза
 await caption('Метрики пользы: доля вопросов без наставника и сэкономленные часы', 1800);
 await loginAs('Мария Волкова');
 await page.getByRole('button', { name: 'Польза', exact: true }).click();

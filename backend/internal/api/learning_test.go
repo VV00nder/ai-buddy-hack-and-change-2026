@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -108,6 +109,10 @@ func TestRightsAndKBEditing(t *testing.T) {
 	}
 	if code := ivan.do("GET", "/api/kb/"+created.ID, nil, nil); code != 404 {
 		t.Fatal("other team reads doc")
+	}
+	// инструкция переживает перезапуск: поднимается из хранилища в индекс
+	if err := e.app.LoadKB(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	// агент отвечает по новой инструкции
 	if m, _ := anna.ask("когда проходят релизы поиска?"); !strings.Contains(m.Text, "вторник") {

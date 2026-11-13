@@ -17,13 +17,17 @@
 | `kb_search(query)` | AI-buddy | нет | Результаты уже отфильтрованы по правам |
 | `plan_get()` | AI-buddy | нет | — |
 | `goals_get()` | AI-buddy | нет | Только свои цели |
+| `plan_step_done(step)` | AI-buddy | **да**, только свой план | Только когда стажёр сам сказал, что сделал шаг; шаги наставника и шаги с тестом не отмечаются |
+| `quiz_list()` | AI-buddy | нет | Тесты своей команды и общие; без правильных ответов |
+| `quiz_offer(quiz_id)` | AI-buddy | нет | Показывает кнопку «Пройти тест»; ответы на тесты агент не подсказывает |
 | `ask_mentor(question)` | AI-buddy | черновик | Отправка только кнопкой |
 | `directory_whoami`, `directory_team` | MCP corp | нет | Только своя команда |
 | `absence_policy`, `absence_balance`, `absence_list`, `absence_get` | MCP corp | нет | Только свои заявки |
 | `absence_create` | MCP corp | **да** | Агент вызывает только с `dry_run=true` (принудительно) |
 | `access_catalog`, `access_list` | MCP corp | нет | — |
 | `access_request` | MCP corp | **да** | Только `dry_run=true` |
-| `absence_decide`, `access_decide` | MCP corp | да | Не передаются агенту; решения — только в интерфейсе руководителя |
+| `absence_decide`, `access_decide`, `delegation_set` | MCP corp | да | Не передаются агенту; решения и права — только в интерфейсе руководителя |
+| `delegation_list` | MCP corp | нет | Свои заместители |
 
 Список MCP-инструментов агент получает через `tools/list` с токеном пользователя, поэтому стажёр физически не видит инструменты руководителя.
 

@@ -185,6 +185,32 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 </section>
 
 <section class="slide">
+  <h2>Обучение прямо в диалоге: шаги отмечаются словами, знания проверяются тестом</h2>
+  <div class="row" style="align-items:flex-start">
+    <img class="shot" src="img/chat-learning.png" style="width:700px">
+    <img class="shot" src="img/quiz-review.png" style="width:700px">
+  </div>
+  <div class="row small">
+    <p class="grow">«Я настроил avito-cli» — шаг плана отмечен, AI-buddy называет следующий и предлагает тест по теме. Шаги можно отметить и галочкой в панели «Сегодня».</p>
+    <p class="grow">Тест после темы или этапа: ответы проверяет сервер, разбор с пояснениями. Сданный тест сам закрывает шаг плана, наставник получает результат.</p>
+  </div>
+  <span class="num">11</span>
+</section>
+
+<section class="slide">
+  <h2>Руководитель настраивает обучение и делится полномочиями</h2>
+  <div class="row" style="align-items:flex-start">
+    <img class="shot" src="img/program.png" style="width:700px">
+    <img class="shot" src="img/rights.png" style="width:700px">
+  </div>
+  <div class="row small">
+    <p class="grow">Шаблоны обучения («Стажёр-разработчик», «Стажёр-аналитик» и шаблоны команды) назначаются стажёру и настраиваются под конкретного человека: убрать лишнее, добавить своё, привязать тест.</p>
+    <p class="grow">Руководитель доверяет сотруднику инструкции и тесты или согласование заявок вместо себя. Инструкции — в папках, с поиском; AI-buddy отвечает по новой инструкции сразу после сохранения.</p>
+  </div>
+  <span class="num">12</span>
+</section>
+
+<section class="slide">
   <h2>Архитектура на стеке Авито</h2>
   <div class="row" style="flex:1">
     <div class="col grow" style="justify-content:center; gap:14px">
@@ -192,7 +218,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
       <p class="arrow" style="align-self:center">↕ REST + SSE</p>
       <div class="note blue"><h3>buddy — Go</h3><p class="small">сессии · агент (LLM / офлайн) · план · заявки · вопросы · метрики</p></div>
       <div class="row" style="gap:14px">
-        <div class="note green grow"><h3>PostgreSQL</h3><p class="small">история, заявки, план, FAQ, события</p></div>
+        <div class="note green grow"><h3>PostgreSQL</h3><p class="small">история, заявки, план, тесты, шаблоны, инструкции</p></div>
         <div class="note green grow"><h3>Redis</h3><p class="small">сессии, rate limit</p></div>
       </div>
       <p class="arrow" style="align-self:center">↕ MCP, токен пользователя</p>
@@ -208,7 +234,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
       </ul>
     </div>
   </div>
-  <span class="num">11</span>
+  <span class="num">13</span>
 </section>
 
 <section class="slide">
@@ -222,8 +248,9 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <tr><td>Таблица <code>events</code></td><td>Clickstream, Kafka</td><td>Sink для плоских событий <code>type, userId, props, at</code></td></tr>
     <tr><td><code>/metrics</code></td><td>Grafana</td><td>Scrape: события и гистограмма времени ответа агента</td></tr>
     <tr><td><code>/api/cron/reminders</code></td><td>Внутренний ИИ-крон</td><td>Вызов по расписанию со служебным токеном; встроенный таймер отключается</td></tr>
+    <tr><td>Заместитель в сервисе заявок</td><td>Делегирование в системе согласований</td><td>Тот же MCP-контракт <code>delegation_set</code>: право хранится там, где заявки</td></tr>
   </table>
-  <span class="num">12</span>
+  <span class="num">14</span>
 </section>
 
 <section class="slide">
@@ -237,22 +264,22 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     <li>Синтетические данные, инструкции помечены как тестовые; больничные, зарплата, финансы — вне области</li>
     <li>Cookie HttpOnly, CSRF-заголовок, CSP, лимиты размера и частоты; ответы ассистента без innerHTML</li>
   </ul>
-  <span class="num">13</span>
+  <span class="num">15</span>
 </section>
 
 <section class="slide">
   <h2>Качество: спецификации, тесты, запуск одной командой</h2>
   <div class="row">
-    <div class="note violet tilt-l" style="width:330px"><p class="kpi">94,8%</p><p class="small">покрытие строк бэкенда (Go), 50 тестов</p></div>
-    <div class="note blue tilt-r" style="width:330px"><p class="kpi">90,9%</p><p class="small">покрытие фронтенда (React/TS), 19 тестов</p></div>
-    <div class="note green tilt-l" style="width:330px"><p class="kpi">17/17</p><p class="small">проверок e2e-сценария по трём ролям в Playwright</p></div>
+    <div class="note violet tilt-l" style="width:330px"><p class="kpi">93,9%</p><p class="small">покрытие строк бэкенда (Go), 61 тест</p></div>
+    <div class="note blue tilt-r" style="width:330px"><p class="kpi">89,5%</p><p class="small">покрытие фронтенда (React/TS), 23 теста</p></div>
+    <div class="note green tilt-l" style="width:330px"><p class="kpi">24/24</p><p class="small">проверки e2e-сценария по трём ролям в Playwright</p></div>
   </div>
   <ul class="clean">
-    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–007 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
+    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–011 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
     <li>Тесты агента в обоих режимах: офлайн и LLM на скриптовой модели (ошибки, зацикливание, сбои)</li>
     <li><code>docker compose up --build</code> — стенд; <code>--profile test</code> — тесты с PostgreSQL и Redis и отчёты о покрытии</li>
   </ul>
-  <span class="num">14</span>
+  <span class="num">16</span>
 </section>
 
 <section class="slide">
@@ -275,7 +302,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
     </div>
   </div>
   <p class="note violet" style="margin-top:auto">Раскатываем, если часы наставника снижаются, а время до первой задачи и CSAT не хуже контроля.</p>
-  <span class="num">15</span>
+  <span class="num">17</span>
 </section>
 
 <section class="slide" style="background:var(--surface)">

@@ -17,8 +17,15 @@
 | Вопрос наставнику и база ответов | [005](005-mentor-escalation/spec.md) | `app/team.go`, `web/src/components/Inbox.tsx` | `api_test.go: TestMentorQuestionAndFAQ` |
 | Цели стажировки (трекер прогресса) | [006](006-goals/spec.md) | `app/goals.go`, `web/src/components/Goals.tsx` | `api_test.go: TestGoals`, `agent_test.go: TestGoalsIntent` |
 | Проактивные напоминания (ИИ-крон) | [007](007-proactive/spec.md) | `app/cron.go` | `api_test.go: TestCronReminders` |
+| Тесты после тем и блоков | [008](008-quizzes/spec.md) | `backend/internal/quiz`, `app/quizzes.go`, `web/src/components/Quizzes.tsx` | `quiz_test.go`, `learning_test.go: TestQuizzes` |
+| Шаблоны обучения и программа под стажёра | [009](009-programs/spec.md) | `onboarding`, `app/programs.go`, `web/src/components/Programs.tsx` | `onboarding_test.go: TestTemplates`, `learning_test.go: TestTemplatesAndPrograms` |
+| Инструкции: папки, поиск, редактирование | [010](010-kb-editing/spec.md) | `knowledge`, `app/kbadmin.go`, `web/src/components/Knowledge.tsx` | `learning_test.go: TestRightsAndKBEditing` |
+| Права от руководителя | [011](011-delegation/spec.md) | `corp/delegation.go`, `app/rights.go`, `web/src/components/Rights.tsx` | `corp_test.go: TestDeputies`, `learning_test.go: TestApprovalDelegation` |
+| Отметка шагов из чата | [002](002-onboarding-plan/spec.md) | `agent/learning.go`, `TodayPanel.tsx` | `learning_test.go: TestChatMarksStepsAndOffersQuiz` |
 | Поведение агента | [agent](agent/agent-spec.md) | `backend/internal/agent` | `agent_test.go` (офлайн и LLM-режим) |
 
-Сквозной сценарий всех фич — `e2e/demo.mjs` (17 проверок, он же записывает видео).
+Сквозной сценарий всех фич — `e2e/demo.mjs` (он же записывает видео).
+
+Спецификации 008–011 и отметка шагов из чата добавлены 13.11.2026 по итогам прогона прототипа командой.
 
 Спецификации 004, 006 и 007 уточнены по ответам экспертов Авито в чате трека (10.11.2026): состав заявки на доступ и согласующие по типу ресурса, цели стажировки, имитация ИИ-крона.

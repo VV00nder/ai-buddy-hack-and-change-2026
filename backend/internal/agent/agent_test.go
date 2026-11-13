@@ -414,3 +414,113 @@ func TestGoalsIntent(t *testing.T) {
 	e3.anna.ID = "broken"
 	_ = e3.ask("цели")
 }
+
+// learnEnv — агент с отметкой шагов и тестами (как в сервисе).
+func learnEnv(t *testing.T, model llm.Client) (*env, *[]string) {
+	e := newEnv(t, model)
+	marked := &[]string{}
+	tpl, _ := onboarding.LoadTemplate()
+	build := func(u domain.User) onboarding.Plan {
+		var states []domain.StepState
+		for _, id := range *marked {
+			states = append(states, domain.StepState{UserID: u.ID, StepID: id, Status: domain.StepDone})
+		}
+		return tpl.Build(u, states, now())
+	}
+	plan := e.agent.d.Plan
+	e.agent.d.Plan = func(ctx context.Context, u domain.User) (onboarding.Plan, error) {
+		if u.ID == "broken" {
+			return plan(ctx, u)
+		}
+		return build(u), nil
+	}
+	e.agent.d.SetStep = func(_ context.Context, u domain.User, step string, st domain.StepStatus) (onboarding.Plan, error) {
+		*marked = append(*marked, step)
+		return build(u), nil
+	}
+	e.agent.d.Quizzes = func(context.Context, domain.User) ([]QuizRef, error) {
+		return []QuizRef{{ID: "quiz-week1", Title: "Доступы и инструменты", DocIDs: []string{"tool-stash-keys"}}}, nil
+	}
+	return e, marked
+}
+
+func TestLLMLearningTools(t *testing.T) {
+	model := &scripted{steps: []llm.Message{
+		toolMsg(call("1", "plan_step_done", map[string]any{"step": "w1-avito-cli"}),
+			call("2", "plan_step_done", map[string]any{"step": "регулярные 1:1"}),
+			call("3", "plan_step_done", map[string]any{"step": "w1-quiz"}),
+			call("4", "plan_step_done", map[string]any{"step": "что-то непонятное"}),
+			call("5", "quiz_list", nil),
+			call("6", "quiz_offer", map[string]any{"quiz_id": "quiz-week1"}),
+			call("7", "quiz_offer", map[string]any{"quiz_id": "none"})),
+		{Role: "assistant", Content: "Отметил avito-cli и предложил тест."},
+	}}
+	e, marked := learnEnv(t, model)
+	r := e.ask("я настроил avito-cli, проверь меня")
+	if r.Mode != "llm" || r.QuizID != "quiz-week1" || len(*marked) != 1 || (*marked)[0] != "w1-avito-cli" {
+		t.Fatalf("reply: %+v marked %v", r, *marked)
+	}
+	joined := ""
+	for _, m := range model.seen[1] {
+		if m.Role == "tool" {
+			joined += m.Content
+		}
+	}
+	for _, want := range []string{`"status":"done"`, "mentor_step", "quiz_step", "step_not_found", "Доступы и инструменты", "button_shown", "not_found"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("tool results miss %s: %s", want, joined)
+		}
+	}
+	// уже отмеченный шаг и стажёр без права
+	model2 := &scripted{steps: []llm.Message{toolMsg(call("1", "plan_step_done", map[string]any{"step": "w1-avito-cli"})), {Role: "assistant", Content: "Готово"}}}
+	e2, m2 := learnEnv(t, model2)
+	*m2 = append(*m2, "w1-avito-cli")
+	e2.ask("сделал avito-cli")
+	if !strings.Contains(model2.seen[1][len(model2.seen[1])-1].Content, "already_done") {
+		t.Fatal("already done")
+	}
+	model3 := &scripted{steps: []llm.Message{toolMsg(call("1", "plan_step_done", map[string]any{"step": "x"}), call("2", "quiz_list", nil)), {Role: "assistant", Content: "Готово"}}}
+	e3 := newEnv(t, model3)
+	e3.ask("отметь")
+	last := model3.seen[1]
+	if !strings.Contains(last[len(last)-2].Content, "not_allowed") || !strings.Contains(last[len(last)-1].Content, "quizzes") {
+		t.Fatalf("no deps: %+v", last)
+	}
+}
+
+func TestOfflineLearning(t *testing.T) {
+	e, marked := learnEnv(t, nil)
+	if r := e.ask("Отметь выполненным: Настрой avito-cli"); !strings.Contains(r.Text, "Отметил") || r.QuizID != "" && r.QuizID != "quiz-week1" {
+		t.Fatalf("done: %+v", r)
+	}
+	if r := e.ask("я сделал следующий шаг"); !strings.Contains(r.Text, "Отметил") || len(*marked) != 2 {
+		t.Fatalf("next: %+v %v", r, *marked)
+	}
+	if r := e.ask("Я выполнил шаг Получи доступ к Stash и добавь SSH-ключи"); r.QuizID != "quiz-week1" {
+		t.Fatalf("quiz suggestion after step: %+v", r)
+	}
+	if r := e.ask("хочу пройти тест"); r.QuizID != "quiz-week1" {
+		t.Fatalf("quiz: %+v", r)
+	}
+	e.agent.d.Quizzes = func(context.Context, domain.User) ([]QuizRef, error) {
+		return []QuizRef{{ID: "q", Title: "Т", Passed: true}}, nil
+	}
+	if r := e.ask("проверь меня"); !strings.Contains(r.Text, "уже сданы") {
+		t.Fatalf("all passed: %+v", r)
+	}
+	e.agent.d.Quizzes = func(context.Context, domain.User) ([]QuizRef, error) { return nil, nil }
+	if r := e.ask("проверь меня"); !strings.Contains(r.Text, "Тестов пока нет") {
+		t.Fatalf("no quizzes: %+v", r)
+	}
+	e.anna.ID = "broken"
+	if r := e.ask("отметь шаг avito-cli"); !strings.Contains(r.Text, "недоступен") {
+		t.Fatalf("plan down: %+v", r)
+	}
+	e2 := newEnv(t, nil)
+	if r := e2.ask("хочу пройти тест по отгулам"); r.QuizID != "" {
+		t.Fatal("no quiz deps")
+	}
+	if r := e2.ask("отметь шаг avito-cli"); !strings.Contains(r.Text, "только в своём плане") {
+		t.Fatal("no setstep deps")
+	}
+}

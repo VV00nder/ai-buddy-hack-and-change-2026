@@ -81,6 +81,8 @@ export function QuizRunner({ id, onExit }: { id: string; onExit: () => void }) {
     mutationFn: (a: number[]) => api.submitQuiz(id, a),
     onSuccess: (r) => {
       setResult(r);
+      // результат — вверху страницы: прокручиваем к нему
+      if (typeof document !== 'undefined') document.querySelector('.content')?.scrollTo({ top: 0 });
       void qc.invalidateQueries({ queryKey: keys.quizzes });
       void qc.invalidateQueries({ queryKey: keys.plan });
       if (r.stepsDone.length > 0) toast('Шаг плана закрыт — тест сдан');

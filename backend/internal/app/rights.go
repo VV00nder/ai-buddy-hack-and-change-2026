@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"aibuddy/internal/domain"
@@ -157,5 +156,3 @@ func (a *App) SetRight(ctx context.Context, s kv.Session, userID, perm string, e
 	a.Track(ctx, lead.ID, "right_changed", map[string]any{"perm": perm, "enabled": enabled})
 	return a.Rights(ctx, s)
 }
-
-func hasPerm(perms []string, p string) bool { return slices.Contains(perms, p) }
