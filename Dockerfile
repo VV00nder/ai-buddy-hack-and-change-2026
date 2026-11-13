@@ -27,7 +27,8 @@ HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0
 ENTRYPOINT ["/app/buddy"]
 
 FROM alpine:3.20 AS corpmock
-RUN adduser -D -H app && apk add --no-cache wget
+# /data — регистрации и переводы сотрудников (том corpdata)
+RUN adduser -D -H app && apk add --no-cache wget && mkdir /data && chown app /data
 COPY --from=gobuild /out/corpmock /app/corpmock
 ENV CORP_ADDR=:8090
 USER app

@@ -27,6 +27,9 @@ type User struct {
 	MentorID  string    `json:"mentorId,omitempty"`
 	LeadID    string    `json:"leadId,omitempty"`
 	StartDate time.Time `json:"startDate"`
+	Email     string    `json:"email,omitempty"`
+	// Registered — учётная запись создана регистрацией (не тестовая).
+	Registered bool `json:"registered,omitempty"`
 }
 
 // StepStatus — статус шага плана адаптации.

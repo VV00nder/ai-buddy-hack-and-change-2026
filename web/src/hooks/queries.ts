@@ -26,6 +26,7 @@ export const keys = {
   templates: ['templates'] as const,
   program: (internId: string) => ['program', internId] as const,
   rights: ['rights'] as const,
+  department: ['department'] as const,
   goals: (internId = '') => ['goals', internId] as const,
   doc: (id: string) => ['doc', id] as const,
 };
@@ -86,6 +87,14 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
         qc.setQueryData<{ notifications: S.Notification[] }>(keys.notifications, (s) => ({ notifications: [n.data, ...(s?.notifications ?? [])] }));
         // права и программы меняют руководитель и наставник — обновляем зависящие от них данные
         if (n.data.kind === 'rights') void qc.invalidateQueries({ queryKey: keys.me });
+        // перевод в другой отдел или новый сотрудник: профиль, план и команда меняются
+        if (n.data.kind === 'team') {
+          void qc.invalidateQueries({ queryKey: keys.me });
+          void qc.invalidateQueries({ queryKey: keys.plan });
+          void qc.invalidateQueries({ queryKey: keys.team });
+          void qc.invalidateQueries({ queryKey: keys.department });
+          void qc.invalidateQueries({ queryKey: keys.approvals });
+        }
         if (n.data.kind === 'quiz') {
           void qc.invalidateQueries({ queryKey: keys.team });
           void qc.invalidateQueries({ queryKey: ['quizResults'] });

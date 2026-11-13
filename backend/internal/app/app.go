@@ -81,6 +81,7 @@ type App struct {
 
 	usersMu sync.Mutex
 	users   []domain.User
+	usersAt time.Time
 	wg      sync.WaitGroup
 	metrics *Metrics
 }
@@ -233,17 +234,32 @@ func (a *App) Session(ctx context.Context, sid string) (kv.Session, error) {
 	if errors.Is(err, kv.ErrNoSession) {
 		return s, ErrUnauthorized
 	}
+	if err == nil {
+		// профиль из справочника: после перевода в другой отдел сессия видит новый отдел и руководителя
+		if u, ok := a.userByID(ctx, s.User.ID); ok {
+			s.User = u
+		}
+	}
 	return s, err
 }
 
 // Logout завершает сессию.
 func (a *App) Logout(ctx context.Context, sid string) error { return a.kv.DeleteSession(ctx, sid) }
 
-// DemoUsers — тестовые учётные записи для экрана входа.
+// usersTTL — как долго держим копию справочника (регистрации и переводы сбрасывают её сразу).
+const usersTTL = 30 * time.Second
+
+func (a *App) invalidateUsers() {
+	a.usersMu.Lock()
+	a.users = nil
+	a.usersMu.Unlock()
+}
+
+// DemoUsers — сотрудники из справочника (тестовые и зарегистрированные).
 func (a *App) DemoUsers(ctx context.Context) ([]domain.User, error) {
 	a.usersMu.Lock()
 	defer a.usersMu.Unlock()
-	if a.users != nil {
+	if a.users != nil && a.now().Sub(a.usersAt) < usersTTL && !a.now().Before(a.usersAt) {
 		return a.users, nil
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, a.cfg.CorpBaseURL+"/sso/users", nil)
@@ -258,7 +274,7 @@ func (a *App) DemoUsers(ctx context.Context) ([]domain.User, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || len(out.Users) == 0 {
 		return nil, ErrUnavailable
 	}
-	a.users = out.Users
+	a.users, a.usersAt = out.Users, a.now()
 	return a.users, nil
 }
 

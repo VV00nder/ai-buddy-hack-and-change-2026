@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,7 +114,13 @@ type Service struct {
 	access        []*AccessRequest
 	// deputies — кому руководитель доверил согласование своих заявок: lead → {user}.
 	deputies map[string]map[string]bool
-	seq      int
+	// order — порядок сотрудников (тестовые, затем зарегистрированные).
+	order []string
+	// creds — пароли зарегистрированных сотрудников (соль и PBKDF2-хеш).
+	creds map[string]cred
+	// stateFile — файл, где сохраняются регистрации и переводы (пусто — только в памяти).
+	stateFile string
+	seq       int
 	// Outage имитирует недоступность сервиса (для демонстрации обработки сбоев).
 	outage bool
 }
@@ -133,7 +140,8 @@ func New(now func() time.Time, loc *time.Location) (*Service, error) {
 	}
 	s := &Service{now: now, loc: loc, teams: map[string]Team{}, users: map[string]*Person{},
 		byLogin: map[string]*Person{}, balance: map[string]int{}, catalog: f.AccessCatalog,
-		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners, deputies: map[string]map[string]bool{}}
+		approverRoles: f.ApproverRoles, devops: f.DevopsDuty, owners: f.ProjectOwners, deputies: map[string]map[string]bool{},
+		order: append([]string{}, loginOrder...), creds: map[string]cred{}}
 	today := dayOf(now().In(loc))
 	for _, t := range f.Teams {
 		s.teams[t.ID] = t
@@ -169,11 +177,11 @@ func (s *Service) Outage() bool {
 	return s.outage
 }
 
-// UserByLogin ищет сотрудника по логину.
+// UserByLogin ищет сотрудника по логину или почте.
 func (s *Service) UserByLogin(login string) (domain.User, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.byLogin[login]
+	p, ok := s.byLogin[strings.ToLower(strings.TrimSpace(login))]
 	if !ok {
 		return domain.User{}, false
 	}
@@ -185,7 +193,7 @@ func (s *Service) Users() []domain.User {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]domain.User, 0, len(s.users))
-	for _, l := range loginOrder {
+	for _, l := range s.order {
 		if p, ok := s.byLogin[l]; ok {
 			out = append(out, p.User)
 		}

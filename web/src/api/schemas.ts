@@ -16,8 +16,15 @@ export const User = z.object({
   mentorId: z.string().optional(),
   leadId: z.string().optional(),
   startDate: z.string(),
+  email: z.string().optional(),
+  registered: z.boolean().optional(),
 });
 export type User = z.infer<typeof User>;
+
+export const TeamInfo = z.object({ id: z.string(), name: z.string(), leadId: z.string(), leadName: z.string() });
+export type TeamInfo = z.infer<typeof TeamInfo>;
+export const Department = z.object({ members: z.array(User), teams: z.array(TeamInfo) });
+export type Department = z.infer<typeof Department>;
 
 export const Source = z.object({ docId: z.string(), title: z.string(), section: z.string().optional() });
 export type Source = z.infer<typeof Source>;

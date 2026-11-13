@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -353,7 +355,7 @@ func TestHTTPAndMCP(t *testing.T) {
 	c := mcp.NewClient(ts.URL+"/mcp", time.Second)
 	ctx := context.Background()
 	tools, err := c.ListTools(ctx, tok.Token)
-	if err != nil || len(tools) != 11 { // стажёр не видит *_decide и delegation_set
+	if err != nil || len(tools) != 12 { // стажёр не видит *_decide, delegation_set и directory_transfer
 		t.Fatalf("tools: %d %v", len(tools), err)
 	}
 	calls := []struct {
@@ -491,5 +493,142 @@ func TestDeputies(t *testing.T) {
 	}
 	if _, err := s.Deputies(maria); err == nil {
 		t.Fatal("outage list")
+	}
+}
+
+func TestRegisterAndTransfer(t *testing.T) {
+	s := newSvc(t)
+	if ts := s.Teams(); len(ts) != 2 || ts[0].LeadName == "" {
+		t.Fatalf("teams with lead: %+v", ts)
+	}
+	ok := RegisterInput{Name: "  Пётр   Сидоров ", Email: "Petr@Example.com", Password: "secret123", Team: "search", Role: "intern"}
+	for name, bad := range map[string]RegisterInput{
+		"name":     {Name: "Пётр", Email: ok.Email, Password: ok.Password, Team: "search", Role: "intern"},
+		"email":    {Name: ok.Name, Email: "petr", Password: ok.Password, Team: "search", Role: "intern"},
+		"email2":   {Name: ok.Name, Email: "a b@x.ru", Password: ok.Password, Team: "search", Role: "intern"},
+		"password": {Name: ok.Name, Email: ok.Email, Password: "short1", Team: "search", Role: "intern"},
+		"digits":   {Name: ok.Name, Email: ok.Email, Password: "onlyletters", Team: "search", Role: "intern"},
+		"role":     {Name: ok.Name, Email: ok.Email, Password: ok.Password, Team: "search", Role: "lead"},
+		"team":     {Name: ok.Name, Email: ok.Email, Password: ok.Password, Team: "platform", Role: "intern"},
+	} {
+		if _, err := s.Register(bad); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	u, err := s.Register(ok)
+	if err != nil || u.Name != "Пётр Сидоров" || u.Login != "petr@example.com" || u.LeadID != "u-maria" || u.MentorID != "u-oleg" || !u.Registered {
+		t.Fatalf("register: %+v %v", u, err)
+	}
+	if _, err := s.Register(ok); err == nil {
+		t.Fatal("duplicate email")
+	}
+	if _, ok := s.CheckPassword("PETR@example.com", "secret123", "buddy2026"); !ok {
+		t.Fatal("login by email")
+	}
+	if _, ok := s.CheckPassword("petr@example.com", "buddy2026", "buddy2026"); ok {
+		t.Fatal("demo password for registered user")
+	}
+	if _, ok := s.CheckPassword("anna", "buddy2026", "buddy2026"); !ok {
+		t.Fatal("demo login")
+	}
+	if _, ok := s.CheckPassword("none", "x", "buddy2026"); ok {
+		t.Fatal("unknown login")
+	}
+	eng, _ := s.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123", Team: "delivery", Role: "engineer"})
+	if eng.LeadID != "u-sergey" || eng.MentorID != "" {
+		t.Fatalf("engineer: %+v", eng)
+	}
+	if n := len(s.Users()); n != 10 {
+		t.Fatalf("users incl. registered: %d", n)
+	}
+	// перевод
+	maria, oleg := claims(s, "maria"), claims(s, "oleg")
+	r, err := s.CreateAbsence(claims(s, "anna"), AbsenceInput{DateFrom: "2026-11-16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = s.SetDeputy(maria, "u-oleg", true)
+	for name, c := range map[string]struct {
+		cl         identity.Claims
+		user, team string
+		code       string
+	}{
+		"mentor":     {oleg, "u-anna", "delivery", "forbidden"},
+		"self":       {maria, "u-maria", "delivery", "self"},
+		"other team": {maria, "u-ivan", "search", "other_team"},
+		"same":       {maria, "u-anna", "search", "same_team"},
+		"bad team":   {maria, "u-anna", "platform", "bad_team"},
+		"unknown":    {maria, "u-none", "delivery", "not_found"},
+	} {
+		if _, err := s.Transfer(c.cl, c.user, c.team); toolCode(err) != c.code {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	res, err := s.Transfer(maria, "u-anna", "delivery")
+	if err != nil || res["movedRequests"] != 1 {
+		t.Fatalf("transfer: %v %v", res, err)
+	}
+	anna, _ := s.UserByLogin("anna")
+	if anna.Team != "delivery" || anna.LeadID != "u-sergey" || anna.MentorID != "u-dmitry" || anna.TeamName == "" {
+		t.Fatalf("anna after transfer: %+v", anna)
+	}
+	if a, _ := s.GetAbsence(claims(s, "sergey"), r["id"].(string)); a["approverId"] != "u-sergey" {
+		t.Fatal("pending absence moved to new lead")
+	}
+	// старый токен Анны: справочник обновляет отдел
+	if c := s.refresh(claims(s, "anna")); c.Team != "delivery" {
+		t.Fatal("refresh claims")
+	}
+	// заместитель переведён — больше не заместитель
+	if _, err := s.Transfer(maria, "u-oleg", "delivery"); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.Deputies(maria); len(d["deputies"].([]map[string]any)) != 0 {
+		t.Fatal("deputy kept after transfer")
+	}
+	if c := s.refresh(identity.Claims{Sub: "u-none"}); c.Sub != "u-none" {
+		t.Fatal("refresh unknown")
+	}
+	s.SetOutage(true)
+	if _, err := s.Transfer(maria, "u-elena", "delivery"); err == nil {
+		t.Fatal("outage transfer")
+	}
+	if _, err := s.Register(RegisterInput{Name: "Аа Бб", Email: "x@example.com", Password: "secret123", Team: "search", Role: "intern"}); err == nil {
+		t.Fatal("outage register")
+	}
+}
+
+func TestStateFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state", "corp.json")
+	s := newSvc(t)
+	if err := s.UseStateFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Register(RegisterInput{Name: "Пётр Сидоров", Email: "petr@example.com", Password: "secret123", Team: "search", Role: "intern"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Transfer(claims(s, "maria"), "u-elena", "delivery"); err != nil {
+		t.Fatal(err)
+	}
+	s2 := newSvc(t)
+	if err := s2.UseStateFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s2.CheckPassword("petr@example.com", "secret123", ""); !ok {
+		t.Fatal("registered user restored")
+	}
+	if e, _ := s2.UserByLogin("elena"); e.Team != "delivery" {
+		t.Fatal("transfer restored")
+	}
+	u, _ := s2.Register(RegisterInput{Name: "Инна Ли", Email: "inna@example.com", Password: "secret123", Team: "search", Role: "engineer"})
+	if u.ID == "" || u.ID == "u-1001" {
+		t.Fatalf("id sequence continues: %s", u.ID)
+	}
+	_ = os.WriteFile(path, []byte("{bad"), 0o600)
+	if err := newSvc(t).UseStateFile(path); err == nil {
+		t.Fatal("bad state")
+	}
+	if err := newSvc(t).UseStateFile(t.TempDir()); err == nil {
+		t.Fatal("dir as state")
 	}
 }

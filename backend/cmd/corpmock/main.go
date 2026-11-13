@@ -25,6 +25,13 @@ func main() {
 		log.Error("init", "err", err)
 		os.Exit(1)
 	}
+	if f := os.Getenv("CORP_STATE_FILE"); f != "" {
+		if err := svc.UseStateFile(f); err != nil {
+			log.Error("state", "err", err)
+			os.Exit(1)
+		}
+		log.Info("corp-mock: регистрации и переводы сохраняются", "file", f)
+	}
 	signer := identity.NewSigner(cfg.IdentitySecret, now)
 	srv := &http.Server{Addr: cfg.Addr, Handler: svc.Handler(signer, cfg.DemoPassword, cfg.AdminToken), ReadHeaderTimeout: 5 * time.Second}
 	go func() {

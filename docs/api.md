@@ -9,6 +9,10 @@
 | GET | `/api/auth/demo-users` | — | Тестовые учётные записи |
 | POST | `/api/auth/login` `{login,password}` | — | Вход через mock-SSO |
 | POST | `/api/auth/logout` | все | Выход |
+| GET | `/api/auth/teams` | — | Отделы и их руководители |
+| POST | `/api/auth/register` `{name,email,password,team,role}` | — | Регистрация (роль `intern` или `engineer`), сразу открывает сессию |
+| GET | `/api/department` | руководитель | Сотрудники отдела и отделы для перевода |
+| POST | `/api/department/{user}/transfer` `{team}` | руководитель | Перевод в другой отдел: новый руководитель, наставник стажёра, перенос заявок |
 | GET | `/api/me` | все | Текущий пользователь и права (`perms`: `kb`, `approvals`, `programs`) |
 | GET | `/api/messages` | все | История диалога и действия |
 | POST | `/api/messages` `{text}` | все | `202`: сообщение и ответ в статусе `pending` |

@@ -66,7 +66,7 @@ func (a *Agent) handleLLM(ctx context.Context, req Request) (Reply, error) {
 	tools := append([]llm.Tool{}, localTools...)
 	if mcpTools, err := a.d.Corp.ListTools(ctx, req.Token); err == nil {
 		for _, t := range mcpTools {
-			if strings.HasSuffix(t.Name, "_decide") || t.Name == "delegation_set" { // решения и права — только в интерфейсе руководителя
+			if strings.HasSuffix(t.Name, "_decide") || t.Name == "delegation_set" || t.Name == "directory_transfer" { // решения и права — только в интерфейсе руководителя
 				continue
 			}
 			tools = append(tools, llm.Tool{Type: "function", Function: llm.FunctionSpec{Name: t.Name, Description: t.Description, Parameters: t.InputSchema}})

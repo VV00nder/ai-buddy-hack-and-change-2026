@@ -43,7 +43,7 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'approvals', label: 'Согласования' },
     { view: 'team', label: 'Стажёры' },
     { view: 'programs', label: 'Шаблоны обучения' },
-    { view: 'rights', label: 'Права' },
+    { view: 'rights', label: 'Отдел и права' },
     { view: 'insights', label: 'Польза' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },

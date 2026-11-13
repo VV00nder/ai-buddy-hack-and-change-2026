@@ -31,6 +31,8 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD:-buddy2026}
       CORP_ADMIN_TOKEN: ${CORP_ADMIN_TOKEN:-demo-admin}
       APP_TZ: ${APP_TZ:-Europe/Moscow}
+      CORP_STATE_FILE: /data/directory.json
+    volumes: [corpdata:/data]
     ports: ["8090:8090"]
 
   buddy:
@@ -72,3 +74,4 @@ services:
 
 volumes:
   pgdata:
+  corpdata:

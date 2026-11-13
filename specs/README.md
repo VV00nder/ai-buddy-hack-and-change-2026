@@ -21,6 +21,7 @@
 | Шаблоны обучения и программа под стажёра | [009](009-programs/spec.md) | `onboarding`, `app/programs.go`, `web/src/components/Programs.tsx` | `onboarding_test.go: TestTemplates`, `learning_test.go: TestTemplatesAndPrograms` |
 | Инструкции: папки, поиск, редактирование | [010](010-kb-editing/spec.md) | `knowledge`, `app/kbadmin.go`, `web/src/components/Knowledge.tsx` | `learning_test.go: TestRightsAndKBEditing` |
 | Права от руководителя | [011](011-delegation/spec.md) | `corp/delegation.go`, `app/rights.go`, `web/src/components/Rights.tsx` | `corp_test.go: TestDeputies`, `learning_test.go: TestApprovalDelegation` |
+| Регистрация и перевод между отделами | [012](012-accounts/spec.md) | `corp/registry.go`, `app/accounts.go`, `Login.tsx`, `Rights.tsx` | `corp_test.go: TestRegisterAndTransfer`, `accounts_test.go` |
 | Отметка шагов из чата | [002](002-onboarding-plan/spec.md) | `agent/learning.go`, `TodayPanel.tsx` | `learning_test.go: TestChatMarksStepsAndOffersQuiz` |
 | Поведение агента | [agent](agent/agent-spec.md) | `backend/internal/agent` | `agent_test.go` (офлайн и LLM-режим) |
 

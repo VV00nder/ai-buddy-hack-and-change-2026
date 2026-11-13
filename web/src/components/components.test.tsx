@@ -17,7 +17,8 @@ import { buildTree, DocEditor, DocView, FolderForm, Knowledge } from './Knowledg
 import { ProgramPanel, Programs, StepEditor, TemplateEditor } from './Programs';
 import { AttemptAnswers, QuizResultsPanel, TeamQuizResults } from './QuizResults';
 import { QuizEditor, QuizForm, QuizReview, QuizRunner, Quizzes } from './Quizzes';
-import { Rights } from './Rights';
+import { Department, Rights } from './Rights';
+import { Register } from './Login';
 import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
@@ -81,6 +82,11 @@ function seeded() {
   ];
   qc.setQueryData(keys.quizResults('u-anna'), { attempts });
   qc.setQueryData(keys.teamQuizResults, { interns: [{ intern: anna, attempts }, { intern: { ...anna, id: 'u-x', name: 'Иван' }, attempts: [] }] });
+  qc.setQueryData(['auth-teams'], { teams: [{ id: 'search', name: 'Поиск объявлений', leadId: 'u-maria', leadName: 'Мария Волкова' }] });
+  qc.setQueryData(keys.department, {
+    members: [anna, { ...oleg, email: 'oleg@example.com', registered: true }],
+    teams: [{ id: 'search', name: 'Поиск объявлений', leadId: 'u-maria', leadName: 'Мария Волкова' }, { id: 'delivery', name: 'Доставка', leadId: 'u-sergey', leadName: 'Сергей' }],
+  });
   qc.setQueryData(keys.rights, { members: [{ user: maria, perms: ['kb'] }, { user: { ...maria, id: 'u-elena', name: 'Елена', role: 'hrbp' }, perms: [] }] });
   qc.setQueryData(['demo-users'], { users: [anna, maria], password: 'buddy2026' });
   const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 40, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
@@ -427,3 +433,23 @@ test('nav by perms, today checkboxes, quiz button in chat', () => {
 function attemptsFor() {
   return { id: 'x', quizId: 'q', title: 'Т', correct: 1, total: 1, percent: 100, passed: true, at: '', review: [{ text: 'В?', options: ['А'], chosen: 0, correct: 0, right: true }] };
 }
+
+test('registration and department transfer', () => {
+  const reg = html(<Register onDone={() => undefined} onBack={() => undefined} />);
+  assert.match(reg, /Регистрация/);
+  assert.match(reg, /ФИО/);
+  assert.match(reg, /Рабочая почта/);
+  assert.match(reg, /Поиск объявлений — руководитель Мария Волкова/);
+  assert.match(reg, /Стажёр/);
+  assert.match(reg, /Сотрудник/);
+  assert.match(html(<Login onDone={() => undefined} />), /Зарегистрироваться/);
+  assert.match(html(<Login onDone={() => undefined} initialMode="register" />), /Отдел и руководитель/);
+  const dep = html(<Department />);
+  assert.match(dep, /Сотрудники отдела/);
+  assert.match(dep, /oleg@example.com/);
+  assert.match(dep, /зарегистрирован/);
+  assert.match(dep, /Доставка — Сергей/);
+  assert.match(dep, /Перевести/);
+  assert.match(html(<Department />, makeQueryClient()), /Загружаю отдел/);
+  assert.match(html(<Rights />, asLead()), /Сотрудники отдела/);
+});

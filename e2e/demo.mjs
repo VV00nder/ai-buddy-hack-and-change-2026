@@ -202,7 +202,7 @@ await logout();
 // 9. Руководитель: права, инструкции, шаблоны обучения
 await caption('Руководитель передаёт часть полномочий: инструкции и тесты, согласование заявок', 2400);
 await loginAs('Мария Волкова');
-await page.getByRole('button', { name: 'Права', exact: true }).click();
+await page.getByRole('button', { name: 'Отдел и права', exact: true }).click();
 await page.getByRole('switch', { name: 'Согласование заявок: Елена Соколова' }).click();
 await page.getByText('Право выдано').waitFor();
 check('право на согласование выдано', await page.getByRole('switch', { name: 'Согласование заявок: Елена Соколова' }).isChecked());

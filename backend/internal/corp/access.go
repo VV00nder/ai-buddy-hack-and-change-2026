@@ -264,7 +264,7 @@ func (s *Service) TeamMembers(c identity.Claims) (map[string]any, error) {
 		return nil, errOutage
 	}
 	members := []map[string]any{}
-	for _, l := range loginOrder {
+	for _, l := range s.order {
 		p := s.byLogin[l]
 		if p.Team == c.Team {
 			members = append(members, map[string]any{"id": p.ID, "name": p.Name, "role": p.Role, "handle": p.Handle})

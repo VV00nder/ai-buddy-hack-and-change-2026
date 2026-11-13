@@ -45,6 +45,10 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     demoUsers: () => call('GET', '/api/auth/demo-users', obj({ users: S.User.array(), password: z.string() })),
     login: (login: string, password: string) => call('POST', '/api/auth/login', obj({ user: S.User }), { login, password }),
     logout: () => call('POST', '/api/auth/logout', ok),
+    register: (r: RegisterInput) => call('POST', '/api/auth/register', obj({ user: S.User }), r),
+    authTeams: () => call('GET', '/api/auth/teams', obj({ teams: S.TeamInfo.array() })),
+    department: () => call('GET', '/api/department', S.Department),
+    transfer: (userId: string, team: string) => call('POST', `/api/department/${encodeURIComponent(userId)}/transfer`, S.Department, { team }),
     me: () => call('GET', '/api/me', S.Me),
     chat: () => call('GET', '/api/messages', S.ChatState),
     send: (text: string) => call('POST', '/api/messages', obj({ user: S.Message, assistant: S.Message }), { text }),
@@ -102,6 +106,14 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     rights: () => call('GET', '/api/rights', obj({ members: S.Member.array() })),
     setRight: (userId: string, perm: string, enabled: boolean) => call('POST', '/api/rights', obj({ members: S.Member.array() }), { userId, perm, enabled }),
   };
+}
+
+export interface RegisterInput {
+  name: string;
+  email: string;
+  password: string;
+  team: string;
+  role: 'intern' | 'engineer';
 }
 
 export interface DocInput {

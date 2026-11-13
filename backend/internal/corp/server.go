@@ -3,6 +3,7 @@ package corp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -142,6 +143,23 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 				}
 				return s.SetDeputy(c, in.UserID, in.Enabled)
 			}},
+		{Info: mcp.ToolInfo{Name: "directory_teams", Title: "Отделы", Description: "Отделы компании и их руководители.",
+			Annotations: map[string]any{"readOnlyHint": true}},
+			Handler: simple(func(identity.Claims, idArgs) (map[string]any, error) { return map[string]any{"teams": s.Teams()}, nil })},
+		{Info: mcp.ToolInfo{Name: "directory_transfer", Title: "Перевод в другой отдел",
+			Description: "Руководитель переводит сотрудника своего отдела в другой отдел; начальником становится руководитель нового отдела.",
+			InputSchema: schema(map[string]any{"user_id": str("ID сотрудника"), "team": str("ID нового отдела")}, "user_id", "team")},
+			Roles: leads,
+			Handler: func(_ context.Context, c identity.Claims, raw json.RawMessage) (map[string]any, error) {
+				in, err := decode[struct {
+					UserID string `json:"user_id"`
+					Team   string `json:"team"`
+				}](raw)
+				if err != nil {
+					return nil, err
+				}
+				return s.Transfer(c, in.UserID, in.Team)
+			}},
 		{Info: mcp.ToolInfo{Name: "delegation_list", Title: "Заместители", Description: "Мои заместители по согласованию и руководители, за которых я согласую.",
 			Annotations: map[string]any{"readOnlyHint": true}},
 			Handler: simple(func(c identity.Claims, _ idArgs) (map[string]any, error) { return s.Deputies(c) })},
@@ -155,7 +173,14 @@ func (s *Service) MCPServer(verify mcp.Verifier) *mcp.Server {
 // Handler — HTTP API имитации: MCP, mock-SSO, health и переключатель сбоя.
 func (s *Service) Handler(signer *identity.Signer, demoPassword, adminToken string) http.Handler {
 	mux := http.NewServeMux()
-	mcpSrv := s.MCPServer(signer.Verify)
+	// после перевода в другой отдел права определяет справочник, а не старый токен
+	mcpSrv := s.MCPServer(func(tok string) (identity.Claims, error) {
+		c, err := signer.Verify(tok)
+		if err != nil {
+			return c, err
+		}
+		return s.refresh(c), nil
+	})
 	mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.Outage() {
 			http.Error(w, "service unavailable (simulated outage)", http.StatusServiceUnavailable)
@@ -173,12 +198,33 @@ func (s *Service) Handler(signer *identity.Signer, demoPassword, adminToken stri
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad_request"})
 			return
 		}
-		u, ok := s.UserByLogin(in.Login)
-		if !ok || in.Password != demoPassword {
+		u, ok := s.CheckPassword(in.Login, in.Password, demoPassword)
+		if !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid_credentials"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"token": signer.Issue(u, 12*time.Hour), "user": u})
+	})
+	// Регистрация сотрудника: ФИО, почта, пароль, отдел (руководитель) и роль.
+	mux.HandleFunc("POST /sso/register", func(w http.ResponseWriter, r *http.Request) {
+		var in RegisterInput
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad_request", "message": "Некорректный запрос"})
+			return
+		}
+		u, err := s.Register(in)
+		var re *RegisterError
+		switch {
+		case errors.As(err, &re):
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid", "message": re.Msg})
+		case err != nil:
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "unavailable"})
+		default:
+			writeJSON(w, http.StatusCreated, map[string]any{"token": signer.Issue(u, 12*time.Hour), "user": u})
+		}
+	})
+	mux.HandleFunc("GET /sso/teams", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"teams": s.Teams()})
 	})
 	mux.HandleFunc("GET /sso/users", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"users": s.Users()})

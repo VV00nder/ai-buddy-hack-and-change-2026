@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { api } from '../api/client';
+import { api, type RegisterInput } from '../api/client';
 import type { User } from '../api/schemas';
 import { initials, roleName } from '../lib/format';
 
@@ -13,7 +13,26 @@ const hints: Record<string, string> = {
   elena: 'HR BP команды: прогресс стажёров и метрики.',
 };
 
-export function Login({ onDone }: { onDone: (u: User) => void }) {
+export function Login({ onDone, initialMode = 'login' }: { onDone: (u: User) => void; initialMode?: 'login' | 'register' }) {
+  const [mode, setMode] = useState(initialMode);
+  if (mode === 'register') return <Register onDone={onDone} onBack={() => setMode('login')} />;
+  return <SignIn onDone={onDone} onRegister={() => setMode('register')} />;
+}
+
+function Intro() {
+  return (
+    <section className="login-intro">
+      <div className="logo-note" aria-hidden="true">
+        <span>AI</span>
+      </div>
+      <h1>AI-buddy</h1>
+      <p className="lead">Помощник стажёра в первые недели: отвечает на рабочие вопросы, ведёт по плану адаптации и оформляет заявки через корпоративные сервисы.</p>
+      <p className="muted small">Прототип для кейса Hack&amp;Change 2026. Все данные и инструкции синтетические.</p>
+    </section>
+  );
+}
+
+function SignIn({ onDone, onRegister }: { onDone: (u: User) => void; onRegister: () => void }) {
   const demo = useQuery({ queryKey: ['demo-users'], queryFn: api.demoUsers });
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -41,14 +60,7 @@ export function Login({ onDone }: { onDone: (u: User) => void }) {
   const users = (demo.data?.users ?? []).filter((u) => hints[u.login]);
   return (
     <main className="login">
-      <section className="login-intro">
-        <div className="logo-note" aria-hidden="true">
-          <span>AI</span>
-        </div>
-        <h1>AI-buddy</h1>
-        <p className="lead">Помощник стажёра в первые недели: отвечает на рабочие вопросы, ведёт по плану адаптации и оформляет заявки через корпоративные сервисы.</p>
-        <p className="muted small">Прототип для кейса Hack&amp;Change 2026. Все данные и инструкции синтетические.</p>
-      </section>
+      <Intro />
       <section className="login-panel" aria-labelledby="demo-title">
         <h2 id="demo-title">Войти тестовой учётной записью</h2>
         {demo.isError && <p className="error">Не удалось загрузить тестовые учётные записи. Войди вручную ниже.</p>}
@@ -69,7 +81,7 @@ export function Login({ onDone }: { onDone: (u: User) => void }) {
         </ul>
         <form className="manual" onSubmit={submit}>
           <label>
-            Логин
+            Логин или почта
             <input value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" required />
           </label>
           <label>
@@ -79,6 +91,88 @@ export function Login({ onDone }: { onDone: (u: User) => void }) {
           <button className="btn" type="submit" disabled={!!busy}>Войти</button>
         </form>
         {error && <p className="error" role="alert">{error}</p>}
+        <p className="register-cta">
+          Нет учётной записи?{' '}
+          <button className="link" onClick={onRegister}>Зарегистрироваться</button>
+        </p>
+      </section>
+    </main>
+  );
+}
+
+const roleOptions: { value: RegisterInput['role']; label: string; hint: string }[] = [
+  { value: 'intern', label: 'Стажёр', hint: 'План адаптации, тесты и наставник отдела' },
+  { value: 'engineer', label: 'Сотрудник', hint: 'Инструкции, заявки и чат без плана стажёра' },
+];
+
+export function Register({ onDone, onBack }: { onDone: (u: User) => void; onBack: () => void }) {
+  const teams = useQuery({ queryKey: ['auth-teams'], queryFn: api.authTeams });
+  const [form, setForm] = useState<RegisterInput>({ name: '', email: '', password: '', team: '', role: 'intern' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<RegisterInput>) => setForm({ ...form, ...patch });
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api.register(form);
+      onDone(r.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось зарегистрироваться');
+    } finally {
+      setBusy(false);
+    }
+  }
+  const team = teams.data?.teams.find((t) => t.id === form.team);
+  return (
+    <main className="login">
+      <Intro />
+      <section className="login-panel" aria-labelledby="reg-title">
+        <h2 id="reg-title">Регистрация</h2>
+        <form className="register" onSubmit={submit}>
+          <label className="field">
+            ФИО
+            <input value={form.name} onChange={(e) => set({ name: e.target.value })} autoComplete="name" placeholder="Сидоров Пётр Андреевич" required />
+          </label>
+          <label className="field">
+            Рабочая почта
+            <input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} autoComplete="email" placeholder="psidorov@example.com" required />
+          </label>
+          <label className="field">
+            Пароль
+            <input type="password" value={form.password} onChange={(e) => set({ password: e.target.value })} autoComplete="new-password" minLength={8} required />
+            <span className="small">Не короче 8 символов, буквы и цифры</span>
+          </label>
+          <label className="field">
+            Отдел и руководитель
+            <select value={form.team} onChange={(e) => set({ team: e.target.value })} required>
+              <option value="">Выберите отдел…</option>
+              {(teams.data?.teams ?? []).map((t) => (
+                <option key={t.id} value={t.id}>{t.name} — руководитель {t.leadName}</option>
+              ))}
+            </select>
+            {team && <span className="small">Вашим руководителем будет {team.leadName}{form.role === 'intern' ? ', наставника назначит отдел' : ''}.</span>}
+          </label>
+          {teams.isError && <p className="error">Не удалось загрузить отделы — проверьте связь и обновите страницу.</p>}
+          <fieldset className="role-pick">
+            <legend className="small muted">Роль</legend>
+            {roleOptions.map((r) => (
+              <label key={r.value} className={`role-option ${form.role === r.value ? 'on' : ''}`}>
+                <input type="radio" name="role" checked={form.role === r.value} onChange={() => set({ role: r.value })} />
+                <span>
+                  <strong>{r.label}</strong>
+                  <span className="muted small">{r.hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <button className="btn" disabled={busy}>{busy ? 'Создаю учётную запись…' : 'Зарегистрироваться'}</button>
+          {error && <p className="error" role="alert">{error}</p>}
+        </form>
+        <p className="register-cta">
+          Уже есть учётная запись? <button className="link" onClick={onBack}>Войти</button>
+        </p>
       </section>
     </main>
   );

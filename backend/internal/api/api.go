@@ -62,6 +62,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/auth/demo-users", s.demoUsers)
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
+	mux.HandleFunc("POST /api/auth/register", s.register)
+	mux.HandleFunc("GET /api/auth/teams", s.teams)
 	mux.HandleFunc("POST /api/cron/reminders", s.cronReminders)
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
@@ -114,6 +116,8 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/team/{intern}/program", s.program)
 	auth("PUT /api/team/{intern}/program", s.programSave)
 	auth("POST /api/team/{intern}/program/assign", s.programAssign)
+	auth("GET /api/department", s.department)
+	auth("POST /api/department/{user}/transfer", s.transfer)
 	auth("GET /api/rights", s.rights)
 	auth("POST /api/rights", s.rightSet)
 	auth("GET /api/events", s.events)
@@ -254,7 +258,13 @@ func (s *Server) demoUsers(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"users": users, "password": "buddy2026"})
+	demo := []domain.User{}
+	for _, u := range users {
+		if !u.Registered { // на экране входа — только тестовые учётные записи
+			demo = append(demo, u)
+		}
+	}
+	writeJSON(w, 200, map[string]any{"users": demo, "password": "buddy2026"})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +284,66 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: sid, Path: "/", HttpOnly: true, Secure: s.secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: 12 * 3600})
 	writeJSON(w, 200, map[string]any{"user": user})
+}
+
+func (s *Server) setSession(w http.ResponseWriter, sid string) {
+	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: sid, Path: "/", HttpOnly: true, Secure: s.secure,
+		SameSite: http.SameSiteLaxMode, MaxAge: 12 * 3600})
+}
+
+func (s *Server) register(w http.ResponseWriter, r *http.Request) {
+	var in app.RegisterInput
+	if !decode(w, r, &in) {
+		return
+	}
+	client := r.Header.Get("X-Forwarded-For")
+	if client == "" {
+		client, _, _ = strings.Cut(r.RemoteAddr, ":")
+	}
+	sid, user, err := s.app.Register(r.Context(), in, client)
+	if errors.Is(err, app.ErrRateLimited) {
+		writeErr(w, 429, "rate_limited", "Слишком много регистраций — попробуйте позже")
+		return
+	}
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.setSession(w, sid)
+	writeJSON(w, 201, map[string]any{"user": user})
+}
+
+func (s *Server) teams(w http.ResponseWriter, r *http.Request) {
+	t, err := s.app.Teams(r.Context())
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"teams": t})
+}
+
+func (s *Server) department(w http.ResponseWriter, r *http.Request) {
+	d, err := s.app.MyDepartment(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, d)
+}
+
+func (s *Server) transfer(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Team string `json:"team"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	d, err := s.app.Transfer(r.Context(), sessionFrom(r), r.PathValue("user"), in.Team)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, d)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

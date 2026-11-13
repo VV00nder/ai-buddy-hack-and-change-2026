@@ -205,7 +205,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
   </div>
   <div class="row small">
     <p class="grow">Шаблоны обучения («Стажёр-разработчик», «Стажёр-аналитик» и шаблоны команды) назначаются стажёру и настраиваются под конкретного человека: убрать лишнее, добавить своё, привязать тест.</p>
-    <p class="grow">Руководитель доверяет сотруднику инструкции и тесты или согласование заявок вместо себя. Инструкции — в папках, с поиском; AI-buddy отвечает по новой инструкции сразу после сохранения.</p>
+    <p class="grow">Руководитель доверяет сотруднику инструкции, тесты и согласование заявок, переводит сотрудников между отделами. Новые сотрудники регистрируются сами и выбирают отдел.</p>
   </div>
   <span class="num">12</span>
 </section>
@@ -270,12 +270,12 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; b
 <section class="slide">
   <h2>Качество: спецификации, тесты, запуск одной командой</h2>
   <div class="row">
-    <div class="note violet tilt-l" style="width:330px"><p class="kpi">93,9%</p><p class="small">покрытие строк бэкенда (Go), 61 тест</p></div>
-    <div class="note blue tilt-r" style="width:330px"><p class="kpi">89,5%</p><p class="small">покрытие фронтенда (React/TS), 23 теста</p></div>
+    <div class="note violet tilt-l" style="width:330px"><p class="kpi">93,7%</p><p class="small">покрытие строк бэкенда (Go), 65 тестов</p></div>
+    <div class="note blue tilt-r" style="width:330px"><p class="kpi">90,0%</p><p class="small">покрытие фронтенда (React/TS), 24 теста</p></div>
     <div class="note green tilt-l" style="width:330px"><p class="kpi">24/24</p><p class="small">проверки e2e-сценария по трём ролям в Playwright</p></div>
   </div>
   <ul class="clean">
-    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–011 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
+    <li><b>SDD в структуре spec-kit:</b> конституция, технический план, спецификации 001–012 с критериями приёмки и ссылками на тесты, спецификация поведения агента с проверочным набором</li>
     <li>Тесты агента в обоих режимах: офлайн и LLM на скриптовой модели (ошибки, зацикливание, сбои)</li>
     <li><code>docker compose up --build</code> — стенд; <code>--profile test</code> — тесты с PostgreSQL и Redis и отчёты о покрытии</li>
   </ul>
