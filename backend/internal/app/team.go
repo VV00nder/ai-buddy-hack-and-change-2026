@@ -1,6 +1,7 @@
 package app
 
 import (
+	"aibuddy/internal/agent"
 	"context"
 	"errors"
 	"fmt"
@@ -305,6 +306,25 @@ func (a *App) Team(ctx context.Context, viewer domain.User) ([]InternSummary, er
 			}
 		}
 		out = append(out, s)
+	}
+	return out, nil
+}
+
+// TeamBriefs — стажёры пользователя для агента (те же права, что у вкладки «Стажёры»).
+func (a *App) TeamBriefs(ctx context.Context, viewer domain.User) ([]agent.InternBrief, error) {
+	rows, err := a.Team(ctx, viewer)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]agent.InternBrief, 0, len(rows))
+	for _, r := range rows {
+		b := agent.InternBrief{ID: r.User.ID, Name: r.User.Name, Team: r.User.TeamName, Day: r.Day, Percent: r.Percent, Done: r.Done,
+			Total: r.Total, Overdue: r.Overdue, NextStep: r.NextStep, OpenQuestions: r.OpenQuestions, GoalsDone: r.GoalsDone,
+			GoalsTotal: r.GoalsTotal, Program: r.TemplateName, QuizzesPassed: r.QuizzesPassed, QuizzesFailed: r.QuizzesFailed}
+		if m, ok := a.userByID(ctx, r.User.MentorID); ok {
+			b.Mentor = m.Name
+		}
+		out = append(out, b)
 	}
 	return out, nil
 }

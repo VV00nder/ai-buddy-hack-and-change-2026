@@ -107,6 +107,8 @@ func (a *Agent) handleOffline(ctx context.Context, req Request) Reply {
 			Proposal: prepareMentorQuestion(q), Answered: true}
 	case has(t, "что ты умеешь", "что умеешь", "помощь", "help", "/start") || regexp.MustCompile(`^(привет|здравств|добрый|хай)`).MatchString(t):
 		return a.greet(ctx, req)
+	case isTeamIntent(req.User, t):
+		return a.teamReply(ctx, req)
 	case isQuizIntent(t):
 		return a.quizReply(ctx, req)
 	case isStepDoneIntent(t):

@@ -153,3 +153,21 @@ func TestTransfer(t *testing.T) {
 		t.Fatal("outage")
 	}
 }
+
+func TestLeadAsksAboutInterns(t *testing.T) {
+	e := newTestEnv(t, allOn(), "")
+	m, _ := e.login("maria").ask("кто сейчас у нас стажируется")
+	if !strings.Contains(m.Text, "Анна Смирнова") || !strings.Contains(m.Text, "4-й день") || strings.Contains(m.Text, "Иван") {
+		t.Fatalf("lead: %s", m.Text)
+	}
+	if m, _ := e.login("oleg").ask("как дела у моих стажёров?"); !strings.Contains(m.Text, "Анна Смирнова") {
+		t.Fatalf("mentor: %s", m.Text)
+	}
+	if m, _ := e.login("pavel").ask("кто стажируется?"); !strings.Contains(m.Text, "нет стажёров") {
+		t.Fatalf("engineer: %s", m.Text)
+	}
+	// стажёр не видит других стажёров
+	if m, _ := e.login("anna").ask("кто ещё стажируется?"); strings.Contains(m.Text, "Иван") {
+		t.Fatalf("intern: %s", m.Text)
+	}
+}

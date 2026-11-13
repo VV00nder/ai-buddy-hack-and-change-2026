@@ -60,7 +60,8 @@ func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 		SetStep: func(ctx context.Context, u domain.User, step string, st domain.StepStatus) (onboarding.Plan, error) {
 			return e.app.SetStep(ctx, u, u.ID, step, st, "")
 		},
-		Quizzes: func(ctx context.Context, u domain.User) ([]agent.QuizRef, error) { return e.app.QuizRefs(ctx, u) }})
+		Quizzes: func(ctx context.Context, u domain.User) ([]agent.QuizRef, error) { return e.app.QuizRefs(ctx, u) },
+		Team:    func(ctx context.Context, u domain.User) ([]agent.InternBrief, error) { return e.app.TeamBriefs(ctx, u) }})
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.app = app.New(app.Config{CorpBaseURL: e.corpTS.URL, MsgRateLimit: 30},
 		app.Deps{Store: e.st, KV: kv.NewMemory(now), Corp: corpClient, KB: kb, Agent: ag, Hub: events.NewHub(), Flags: ff, Now: now, Log: log})

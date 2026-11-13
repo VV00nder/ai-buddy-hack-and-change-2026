@@ -50,6 +50,8 @@ type Deps struct {
 	Goals func(ctx context.Context, u domain.User) ([]domain.Goal, error)
 	// SetStep — отметка шага плана из чата (необязательно).
 	SetStep func(ctx context.Context, u domain.User, stepID string, status domain.StepStatus) (onboarding.Plan, error)
+	// Team — стажёры, которых видит наставник, руководитель или HR BP (необязательно).
+	Team func(ctx context.Context, u domain.User) ([]InternBrief, error)
 	// Quizzes — тесты, доступные пользователю (необязательно).
 	Quizzes func(ctx context.Context, u domain.User) ([]QuizRef, error)
 	Now     func() time.Time

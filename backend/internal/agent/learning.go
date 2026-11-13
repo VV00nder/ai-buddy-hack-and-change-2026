@@ -198,3 +198,78 @@ func (a *Agent) quizReply(ctx context.Context, req Request) Reply {
 	}
 	return Reply{Text: b.String(), Answered: true, QuizID: pick.ID}
 }
+
+// InternBrief — стажёр в обзоре для наставника, руководителя и HR BP.
+type InternBrief struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Team          string `json:"team"`
+	Mentor        string `json:"mentor,omitempty"`
+	Day           int    `json:"day"`
+	Percent       int    `json:"percent"`
+	Done          int    `json:"done"`
+	Total         int    `json:"total"`
+	Overdue       int    `json:"overdue"`
+	NextStep      string `json:"nextStep,omitempty"`
+	OpenQuestions int    `json:"openQuestions"`
+	GoalsDone     int    `json:"goalsDone"`
+	GoalsTotal    int    `json:"goalsTotal"`
+	Program       string `json:"program,omitempty"`
+	QuizzesPassed int    `json:"quizzesPassed"`
+	QuizzesFailed int    `json:"quizzesFailed"`
+}
+
+var reTeamIntent = regexp.MustCompile(`(кто .*стажир|мои стажер|моих стажер|наши стажер|наших стажер|стажеры|стажеров|у стажер|как дела у|прогресс стажер|кто отстает|кто отстаёт|просроч)`)
+
+// isTeamIntent — руководитель или наставник спрашивает о своих стажёрах.
+func isTeamIntent(u domain.User, t string) bool {
+	return u.Role != domain.RoleIntern && reTeamIntent.MatchString(t)
+}
+
+func (a *Agent) teamReply(ctx context.Context, req Request) Reply {
+	if a.d.Team == nil {
+		return a.kbAnswer(ctx, req)
+	}
+	a.step(req, "tool", "Смотрю стажёров команды")
+	list, err := a.d.Team(ctx, req.User)
+	if err != nil {
+		return Reply{Text: "Не получилось загрузить стажёров — попробуй через минуту или открой вкладку «Стажёры».", Answered: true}
+	}
+	if len(list) == 0 {
+		return Reply{Text: "Сейчас у тебя нет стажёров: за тобой никто не закреплён как за наставником или руководителем.", Answered: true}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Сейчас стажируются %d %s:\n", len(list), pluralRu(len(list), "человек", "человека", "человек"))
+	for _, s := range list {
+		fmt.Fprintf(&b, "- **%s** — %d-й день, план %d%% (%d из %d)", s.Name, s.Day, s.Percent, s.Done, s.Total)
+		if s.Overdue > 0 {
+			fmt.Fprintf(&b, ", просрочено шагов: %d", s.Overdue)
+		}
+		if s.Mentor != "" {
+			fmt.Fprintf(&b, ", наставник %s", s.Mentor)
+		}
+		if s.NextStep != "" {
+			fmt.Fprintf(&b, ". Следующий шаг: «%s»", s.NextStep)
+		}
+		if s.OpenQuestions > 0 {
+			fmt.Fprintf(&b, ". Вопросов без ответа: %d", s.OpenQuestions)
+		}
+		if s.QuizzesPassed+s.QuizzesFailed > 0 {
+			fmt.Fprintf(&b, ". Тесты: сдано %d, не сдано %d", s.QuizzesPassed, s.QuizzesFailed)
+		}
+		b.WriteString(".\n")
+	}
+	b.WriteString("\nПодробности — во вкладке «Стажёры».")
+	return Reply{Text: b.String(), Answered: true, Suggestions: []string{"Кто отстаёт от плана?", "Что мне нужно согласовать?"}}
+}
+
+func pluralRu(n int, one, few, many string) string {
+	m10, m100 := n%10, n%100
+	switch {
+	case m10 == 1 && m100 != 11:
+		return one
+	case m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14):
+		return few
+	}
+	return many
+}

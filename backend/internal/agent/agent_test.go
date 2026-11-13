@@ -524,3 +524,45 @@ func TestOfflineLearning(t *testing.T) {
 		t.Fatal("no setstep deps")
 	}
 }
+
+func TestTeamTool(t *testing.T) {
+	model := &scripted{steps: []llm.Message{toolMsg(call("1", "team_interns", nil)), {Role: "assistant", Content: "Стажируется Анна."}}}
+	e := newEnv(t, model)
+	maria, _ := e.corp.UserByLogin("maria")
+	e.anna = maria
+	e.agent.d.Team = func(context.Context, domain.User) ([]InternBrief, error) {
+		return []InternBrief{{Name: "Анна Смирнова", Day: 4, Percent: 10, Overdue: 1, Mentor: "Олег", NextStep: "Stash", OpenQuestions: 1, QuizzesPassed: 1}}, nil
+	}
+	if r := e.ask("кто стажируется"); r.Mode != "llm" || !strings.Contains(model.seen[1][len(model.seen[1])-1].Content, "Анна Смирнова") {
+		t.Fatalf("llm team: %+v", r)
+	}
+	if !strings.Contains(model.seen[0][0].Content, "руководитель") {
+		t.Fatal("role in context")
+	}
+	// офлайн
+	e2 := newEnv(t, nil)
+	e2.anna = maria
+	e2.agent.d.Team = e.agent.d.Team
+	if r := e2.ask("кто сейчас у нас стажируется"); !strings.Contains(r.Text, "Анна Смирнова") || !strings.Contains(r.Text, "просрочено") || !strings.Contains(r.Text, "Тесты: сдано 1") {
+		t.Fatalf("offline team: %s", r.Text)
+	}
+	e2.agent.d.Team = func(context.Context, domain.User) ([]InternBrief, error) { return nil, errors.New("down") }
+	if r := e2.ask("мои стажёры"); !strings.Contains(r.Text, "Не получилось") {
+		t.Fatal("team down")
+	}
+	e2.agent.d.Team = nil
+	if r := e2.ask("мои стажёры"); r.Text == "" {
+		t.Fatal("no team deps")
+	}
+	// стажёру инструмент не выдаётся
+	model3 := &scripted{steps: []llm.Message{toolMsg(call("1", "team_interns", nil)), {Role: "assistant", Content: "Нет."}}}
+	e3 := newEnv(t, model3)
+	e3.agent.d.Team = e.agent.d.Team
+	e3.ask("кто стажируется")
+	if !strings.Contains(model3.seen[1][len(model3.seen[1])-1].Content, "not_allowed") {
+		t.Fatal("intern team tool")
+	}
+	if pluralRu(2, "a", "b", "c") != "b" || pluralRu(5, "a", "b", "c") != "c" || pluralRu(21, "a", "b", "c") != "a" {
+		t.Fatal("plural")
+	}
+}

@@ -43,13 +43,21 @@ var localTools = []llm.Tool{
 			"question": map[string]any{"type": "string", "description": "Вопрос от лица стажёра"}}, "required": []string{"question"}}}},
 }
 
+// teamTool — только для наставника, руководителя и HR BP: стажёры, которых пользователь видит по правам.
+var teamTool = llm.Tool{Type: "function", Function: llm.FunctionSpec{Name: "team_interns",
+	Description: "Стажёры, за которых отвечает пользователь (наставник, руководитель, HR BP): день стажировки, прогресс плана, просрочки, следующий шаг, вопросы без ответа, цели, программа, тесты.",
+	Parameters:  map[string]any{"type": "object", "properties": map[string]any{}}}}
+
 // writeTools — инструменты с побочным эффектом: агент выполняет их только в
 // режиме dry_run, а реальная отправка — после подтверждения стажёром.
 var writeTools = map[string]bool{"absence_create": true, "access_request": true}
 
 func (a *Agent) contextBlock(ctx context.Context, u domain.User) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Пользователь: %s, роль: %s, команда: %s.", u.Name, u.Role, u.TeamName)
+	fmt.Fprintf(&b, "Пользователь: %s, роль: %s, команда: %s.", u.Name, roleNames[u.Role], u.TeamName)
+	if u.Role != domain.RoleIntern {
+		b.WriteString(" Пользователь не стажёр: он ведёт стажёров или работает с ними, о своих стажёрах спрашивай инструмент team_interns.")
+	}
 	if a.d.Plan != nil && u.Role == domain.RoleIntern {
 		if p, err := a.d.Plan(ctx, u); err == nil {
 			fmt.Fprintf(&b, " День стажировки: %d, прогресс плана: %d%%.", p.Day, p.Percent)
@@ -64,6 +72,9 @@ func (a *Agent) contextBlock(ctx context.Context, u domain.User) string {
 func (a *Agent) handleLLM(ctx context.Context, req Request) (Reply, error) {
 	a.step(req, "thinking", "Думаю над ответом")
 	tools := append([]llm.Tool{}, localTools...)
+	if req.User.Role != domain.RoleIntern && a.d.Team != nil {
+		tools = append(tools, teamTool)
+	}
 	if mcpTools, err := a.d.Corp.ListTools(ctx, req.Token); err == nil {
 		for _, t := range mcpTools {
 			if strings.HasSuffix(t.Name, "_decide") || t.Name == "delegation_set" || t.Name == "directory_transfer" { // решения и права — только в интерфейсе руководителя
@@ -156,6 +167,15 @@ func (a *Agent) runTool(ctx context.Context, req Request, tc llm.ToolCall, reply
 			return map[string]any{"error": "goals_unavailable"}
 		}
 		return map[string]any{"goals": goals}
+	case "team_interns":
+		if a.d.Team == nil || req.User.Role == domain.RoleIntern {
+			return map[string]any{"error": "not_allowed"}
+		}
+		list, err := a.d.Team(ctx, req.User)
+		if err != nil {
+			return map[string]any{"error": "team_unavailable"}
+		}
+		return map[string]any{"interns": list}
 	case "plan_step_done":
 		return a.llmStepDone(ctx, req, args)
 	case "quiz_list":
@@ -258,3 +278,6 @@ func (a *Agent) llmStepDone(ctx context.Context, req Request, args map[string]an
 	}
 	return out
 }
+
+var roleNames = map[domain.Role]string{domain.RoleIntern: "стажёр", domain.RoleMentor: "наставник", domain.RoleLead: "руководитель",
+	domain.RoleHRBP: "HR BP", domain.RoleEngineer: "сотрудник"}
