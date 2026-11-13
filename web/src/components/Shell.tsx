@@ -131,7 +131,7 @@ export function Shell({ user }: { user: User }) {
           {view === 'plan' && <PlanView />}
           {view === 'requests' && <Requests />}
           {view === 'knowledge' && <Knowledge />}
-          {view === 'quizzes' && <Quizzes />}
+          {view === 'quizzes' && <Quizzes role={user.role} />}
           {view === 'programs' && <Programs />}
           {view === 'rights' && <Rights />}
           {view === 'inbox' && <Inbox />}

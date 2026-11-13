@@ -22,6 +22,7 @@ export const keys = {
   quiz: (id: string) => ['quiz', id] as const,
   quizFull: (id: string) => ['quizFull', id] as const,
   quizResults: (internId = '') => ['quizResults', internId] as const,
+  teamQuizResults: ['teamQuizResults'] as const,
   templates: ['templates'] as const,
   program: (internId: string) => ['program', internId] as const,
   rights: ['rights'] as const,
@@ -85,7 +86,11 @@ export function applyUpdate(qc: QueryClient, u: { type: string; data?: unknown }
         qc.setQueryData<{ notifications: S.Notification[] }>(keys.notifications, (s) => ({ notifications: [n.data, ...(s?.notifications ?? [])] }));
         // права и программы меняют руководитель и наставник — обновляем зависящие от них данные
         if (n.data.kind === 'rights') void qc.invalidateQueries({ queryKey: keys.me });
-        if (n.data.kind === 'quiz') void qc.invalidateQueries({ queryKey: keys.team });
+        if (n.data.kind === 'quiz') {
+          void qc.invalidateQueries({ queryKey: keys.team });
+          void qc.invalidateQueries({ queryKey: ['quizResults'] });
+          void qc.invalidateQueries({ queryKey: keys.teamQuizResults });
+        }
       }
       break;
     }

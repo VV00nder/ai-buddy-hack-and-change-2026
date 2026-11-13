@@ -278,9 +278,24 @@ func TestQuizzes(t *testing.T) {
 	if len(notes.Notifications) < 2 || !strings.Contains(notes.Notifications[0].Text, "сдал") {
 		t.Fatalf("mentor notified: %+v", notes)
 	}
-	var atts struct{ Attempts []quiz.Attempt }
+	var atts struct{ Attempts []app.AttemptView }
 	if code := oleg.do("GET", "/api/quiz-results?internId=u-anna", nil, &atts); code != 200 || len(atts.Attempts) != 2 {
 		t.Fatal("mentor results")
+	}
+	// подробный разбор: ответ стажёра и правильный ответ на каждый вопрос
+	if r := atts.Attempts[0].Review; len(r) != 5 || r[0].Chosen != 0 || r[0].Correct != 1 || r[0].Right || !atts.Attempts[1].Review[0].Right {
+		t.Fatalf("review: %+v", atts.Attempts[0].Review)
+	}
+	var teamRes struct{ Interns []app.InternQuizResults }
+	if code := maria.do("GET", "/api/quiz-results/team", nil, &teamRes); code != 200 || len(teamRes.Interns) != 1 || len(teamRes.Interns[0].Attempts) != 2 || len(teamRes.Interns[0].Attempts[0].Review) != 5 {
+		t.Fatalf("lead team results: %d %+v", code, teamRes)
+	}
+	if code := anna.do("GET", "/api/quiz-results/team", nil, nil); code != 403 {
+		t.Fatal("intern team results")
+	}
+	dmitry.do("GET", "/api/quiz-results/team", nil, &teamRes)
+	if len(teamRes.Interns) != 1 || teamRes.Interns[0].Intern.ID != "u-ivan" || len(teamRes.Interns[0].Attempts) != 0 {
+		t.Fatal("other mentor sees only own intern")
 	}
 	if code := dmitry.do("GET", "/api/quiz-results?internId=u-anna", nil, nil); code != 403 {
 		t.Fatal("other mentor results")

@@ -4,10 +4,11 @@ import { api, type QuizInput } from '../api/client';
 import type { QuizFull, QuizInfo, QuizQuestion, QuizResult } from '../api/schemas';
 import { keys, usePerms } from '../hooks/queries';
 import { useUi } from '../store/ui';
+import { TeamQuizResults } from './QuizResults';
 import { plural } from '../lib/format';
 
 /** Раздел «Тесты»: проверка усвоенного материала после темы или блока тем. */
-export function Quizzes() {
+export function Quizzes({ role }: { role?: string }) {
   const { quizId, go } = useUi();
   const perms = usePerms();
   const [editing, setEditing] = useState<string | 'new' | null>(null);
@@ -22,10 +23,14 @@ export function Quizzes() {
     <section className="quizzes">
       <header className="row">
         <p className="muted">
-          Короткие тесты после темы или блока тем. Сдано {passed} из {qs.length}. Ответы проверяются сразу, после сдачи — разбор ошибок.
+          {role && role !== 'intern'
+            ? 'Тесты после темы или блока тем. Ниже — результаты ваших стажёров; в карточке стажёра видны все попытки и ответ на каждый вопрос.'
+            : `Короткие тесты после темы или блока тем. Сдано ${passed} из ${qs.length}. Ответы проверяются сразу, после сдачи — разбор ошибок.`}
         </p>
         {perms.has('kb') && <button className="btn small" onClick={() => setEditing('new')}>Новый тест</button>}
       </header>
+      {role && role !== 'intern' && <TeamQuizResults />}
+      {role && role !== 'intern' && <h3 className="section-title">Все тесты</h3>}
       <ul className="quiz-grid">
         {qs.map((q) => (
           <QuizCard key={q.id} q={q} onOpen={() => go('quizzes', { quizId: q.id })} onEdit={() => setEditing(q.id)} />

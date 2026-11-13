@@ -141,7 +141,7 @@ func (a *App) SubmitQuiz(ctx context.Context, u domain.User, id string, answers 
 	if err != nil {
 		return QuizResult{}, invalid("%s", err.Error())
 	}
-	at.ID, at.UserID, at.At = newID("qa"), u.ID, a.now()
+	at.ID, at.UserID, at.At = newID("qa"), u.ID, a.stamp() // монотонное время — порядок попыток стабилен
 	if err := putRec(ctx, a.store, recQuizAttempt, at.ID, at); err != nil {
 		return QuizResult{}, err
 	}
@@ -190,8 +190,35 @@ func (a *App) completeQuizSteps(ctx context.Context, intern domain.User, q *quiz
 	return out
 }
 
-// QuizResults — попытки стажёра (для самого стажёра, наставника, руководителя, HR BP).
-func (a *App) QuizResults(ctx context.Context, viewer domain.User, internID string) ([]quiz.Attempt, error) {
+// AttemptView — попытка с разбором по вопросам (для наставника, руководителя и самого стажёра).
+type AttemptView struct {
+	quiz.Attempt
+	Review []quiz.Review `json:"review"`
+}
+
+// withReview восстанавливает разбор попытки по тексту теста.
+func (a *App) withReview(ctx context.Context, intern domain.User, atts []quiz.Attempt) []AttemptView {
+	out := make([]AttemptView, 0, len(atts))
+	cache := map[string]*quiz.Quiz{}
+	for _, at := range atts {
+		v := AttemptView{Attempt: at, Review: []quiz.Review{}}
+		q, ok := cache[at.QuizID]
+		if !ok {
+			q, _ = a.quizByID(ctx, intern, at.QuizID)
+			cache[at.QuizID] = q
+		}
+		if q != nil && len(q.Questions) == len(at.Answers) {
+			_, rev, _ := q.Grade(at.Answers)
+			v.Review = rev
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// QuizResults — попытки стажёра с ответами на каждый вопрос (для самого стажёра,
+// наставника, руководителя, HR BP).
+func (a *App) QuizResults(ctx context.Context, viewer domain.User, internID string) ([]AttemptView, error) {
 	if internID == "" {
 		internID = viewer.ID
 	}
@@ -202,7 +229,40 @@ func (a *App) QuizResults(ctx context.Context, viewer domain.User, internID stri
 	if !canViewIntern(viewer, intern) {
 		return nil, ErrForbidden
 	}
-	return a.attemptsOf(ctx, internID)
+	atts, err := a.attemptsOf(ctx, internID)
+	if err != nil {
+		return nil, err
+	}
+	return a.withReview(ctx, intern, atts), nil
+}
+
+// InternQuizResults — результаты одного стажёра в сводке команды.
+type InternQuizResults struct {
+	Intern   domain.User   `json:"intern"`
+	Attempts []AttemptView `json:"attempts"`
+}
+
+// TeamQuizResults — результаты тестов всех стажёров, которых видит пользователь.
+func (a *App) TeamQuizResults(ctx context.Context, viewer domain.User) ([]InternQuizResults, error) {
+	if viewer.Role == domain.RoleIntern {
+		return nil, ErrForbidden
+	}
+	users, err := a.DemoUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []InternQuizResults{}
+	for _, u := range users {
+		if u.Role != domain.RoleIntern || !canViewIntern(viewer, u) {
+			continue
+		}
+		atts, err := a.attemptsOf(ctx, u.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, InternQuizResults{Intern: u, Attempts: a.withReview(ctx, u, atts)})
+	}
+	return out, nil
 }
 
 // SaveQuiz создаёт или изменяет тест команды.

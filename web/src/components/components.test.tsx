@@ -14,7 +14,8 @@ import { Bubble, Chat } from './Chat';
 import { AnswerForm, Inbox } from './Inbox';
 import { Insights, InsightsBody } from './Insights';
 import { buildTree, DocEditor, DocView, FolderForm, Knowledge } from './Knowledge';
-import { ProgramPanel, Programs, QuizResultsPanel, StepEditor, TemplateEditor } from './Programs';
+import { ProgramPanel, Programs, StepEditor, TemplateEditor } from './Programs';
+import { AttemptAnswers, QuizResultsPanel, TeamQuizResults } from './QuizResults';
 import { QuizEditor, QuizForm, QuizReview, QuizRunner, Quizzes } from './Quizzes';
 import { Rights } from './Rights';
 import { Login } from './Login';
@@ -72,10 +73,14 @@ function seeded() {
   const tpl = { id: 'intern-dev', name: 'Стажёр-разработчик', description: 'Базовый', builtin: true, periods, steps: [tplStep('s1', 'week1'), tplStep('s2', 'week1', { owner: 'mentor' }), tplStep('s3', 'week2', { quiz: 'quiz-dayoff' })] };
   qc.setQueryData(keys.templates, { templates: [tpl, { ...tpl, id: 'tpl_1', name: 'Аналитик поиска', builtin: false, team: 'search', updatedBy: 'Олег' }] });
   qc.setQueryData(keys.program('u-anna'), { internId: 'u-anna', baseId: 'tpl_1', customized: true, template: { ...tpl, id: 'tpl_1', builtin: false }, updatedBy: 'Мария' });
-  qc.setQueryData(keys.quizResults('u-anna'), { attempts: [
-    { id: 'a1', quizId: 'quiz-dayoff', title: 'Отгулы', correct: 1, total: 3, percent: 33, passed: false, at: '2026-11-10T12:00:00Z' },
-    { id: 'a2', quizId: 'quiz-dayoff', title: 'Отгулы', correct: 3, total: 3, percent: 100, passed: true, at: '2026-11-10T13:00:00Z' },
-  ] });
+  const rv = (right: boolean) => ({ text: 'Кто согласует отгул?', options: ['Наставник', 'Руководитель'], chosen: right ? 1 : 0, correct: 1, right });
+  const attempts = [
+    { id: 'a1', quizId: 'quiz-dayoff', title: 'Отгулы', correct: 1, total: 3, percent: 33, passed: false, at: '2026-11-10T12:00:00Z', review: [rv(false)] },
+    { id: 'a2', quizId: 'quiz-dayoff', title: 'Отгулы', correct: 3, total: 3, percent: 100, passed: true, at: '2026-11-10T13:00:00Z', review: [rv(true)] },
+    { id: 'a3', quizId: 'q-old', title: 'Удалённый', correct: 0, total: 1, percent: 0, passed: false, at: '2026-11-10T14:00:00Z', review: [] },
+  ];
+  qc.setQueryData(keys.quizResults('u-anna'), { attempts });
+  qc.setQueryData(keys.teamQuizResults, { interns: [{ intern: anna, attempts }, { intern: { ...anna, id: 'u-x', name: 'Иван' }, attempts: [] }] });
   qc.setQueryData(keys.rights, { members: [{ user: maria, perms: ['kb'] }, { user: { ...maria, id: 'u-elena', name: 'Елена', role: 'hrbp' }, perms: [] }] });
   qc.setQueryData(['demo-users'], { users: [anna, maria], password: 'buddy2026' });
   const goal = { id: 'g1', internId: 'u-anna', title: 'Закрыть SEARCH-101', metric: 'MR выкачен на staging', due: '2026-11-24', status: 'in_progress', progress: 40, note: 'жду ревью', createdBy: 'u-maria', createdAt: '' };
@@ -353,9 +358,28 @@ test('templates, programs, rights', () => {
   assert.match(pp, /Назначить другой шаблон/);
   assert.doesNotMatch(html(<ProgramPanel internId="u-anna" internName="Анна" />), /Настроить под стажёра/);
   const qr = html(<QuizResultsPanel internId="u-anna" />);
-  assert.match(qr, /сдан/);
-  assert.match(qr, /попыток: 2/);
+  assert.match(qr, /лучший результат/);
+  assert.match(qr, /2 попытки/);
+  assert.match(qr, /Попытка 1 · 10 ноября/);
+  assert.match(qr, /Ошибка<\/span>: Наставник/);
+  assert.match(qr, /Правильный ответ: Руководитель/);
+  assert.match(qr, /разбор по вопросам недоступен/);
   assert.equal(html(<QuizResultsPanel internId="u-x" />, makeQueryClient()), '');
+  const empty = seeded();
+  empty.setQueryData(keys.quizResults('u-x'), { attempts: [] });
+  assert.match(html(<QuizResultsPanel internId="u-x" />, empty), /ещё не проходил/);
+  const tq = html(<TeamQuizResults />);
+  assert.match(tq, /Результаты стажёров/);
+  assert.match(tq, /Удалённый/);
+  assert.match(tq, /—/);
+  assert.match(html(<AttemptAnswers a={attemptsFor()} />), /Верно/);
+  useUi.getState().go('quizzes');
+  assert.match(html(<Quizzes role="lead" />, asLead()), /Результаты стажёров/);
+  assert.doesNotMatch(html(<Quizzes role="intern" />), /Результаты стажёров/);
+  const noAtt = seeded();
+  noAtt.setQueryData(keys.teamQuizResults, { interns: [{ intern: anna, attempts: [] }] });
+  assert.match(html(<TeamQuizResults />, noAtt), /ещё не проходили/);
+  assert.match(html(<TeamQuizResults />, makeQueryClient()), /Загружаю результаты/);
   const r = html(<Rights />, asLead());
   assert.match(r, /Инструкции и тесты/);
   assert.match(r, /Согласование заявок/);
@@ -365,7 +389,7 @@ test('templates, programs, rights', () => {
   useUi.getState().go('team', { internId: 'u-anna' });
   const detail = html(<Team />, asLead());
   assert.match(detail, /Программа обучения/);
-  assert.match(detail, /Тесты/);
+  assert.match(detail, /Результаты тестов/);
   useUi.getState().go('team');
 });
 
@@ -399,3 +423,7 @@ test('nav by perms, today checkboxes, quiz button in chat', () => {
   }
   useUi.getState().go('chat');
 });
+
+function attemptsFor() {
+  return { id: 'x', quizId: 'q', title: 'Т', correct: 1, total: 1, percent: 100, passed: true, at: '', review: [{ text: 'В?', options: ['А'], chosen: 0, correct: 0, right: true }] };
+}

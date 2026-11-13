@@ -88,7 +88,8 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     deleteQuiz: (id: string) => call('DELETE', `/api/quizzes/${encodeURIComponent(id)}`, ok),
     submitQuiz: (id: string, answers: number[]) => call('POST', `/api/quizzes/${encodeURIComponent(id)}/submit`, S.QuizResult, { answers }),
     quizResults: (internId?: string) =>
-      call('GET', `/api/quiz-results${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ attempts: S.QuizAttempt.array() })),
+      call('GET', `/api/quiz-results${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ attempts: S.AttemptView.array() })),
+    teamQuizResults: () => call('GET', '/api/quiz-results/team', obj({ interns: S.InternQuizResults.array() })),
     templates: () => call('GET', '/api/templates', obj({ templates: S.Template.array() })),
     saveTemplate: (t: TemplateInput) =>
       t.id ? call('PUT', `/api/templates/${encodeURIComponent(t.id)}`, S.Template, t) : call('POST', '/api/templates', S.Template, t),

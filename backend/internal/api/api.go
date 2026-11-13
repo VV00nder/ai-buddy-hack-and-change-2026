@@ -106,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	auth("DELETE /api/quizzes/{id}", s.quizDelete)
 	auth("POST /api/quizzes/{id}/submit", s.quizSubmit)
 	auth("GET /api/quiz-results", s.quizResults)
+	auth("GET /api/quiz-results/team", s.teamQuizResults)
 	auth("GET /api/templates", s.templates)
 	auth("POST /api/templates", s.templateSave)
 	auth("PUT /api/templates/{id}", s.templateSave)
@@ -707,6 +708,15 @@ func (s *Server) quizResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"attempts": res})
+}
+
+func (s *Server) teamQuizResults(w http.ResponseWriter, r *http.Request) {
+	res, err := s.app.TeamQuizResults(r.Context(), sessionFrom(r).User)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"interns": res})
 }
 
 func (s *Server) templates(w http.ResponseWriter, r *http.Request) {

@@ -360,7 +360,21 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .intern-detail .back { margin-bottom: 0; }
 .program-panel, .quiz-results { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 14px 18px; display: grid; gap: 10px; }
 .program-panel h3, .quiz-results h3 { font-size: 17px; }
-.quiz-results ul { display: grid; gap: 6px; }
+.qr-quiz { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.qr-attempts { display: grid; gap: 4px; }
+.qr-attempts summary { cursor: pointer; padding: 4px 0; }
+.qr-answers { display: grid; gap: 6px; margin: 6px 0 8px 4px; padding-left: 12px; }
+.qr-answers li { border-left: 3px solid var(--go); padding-left: 10px; }
+.qr-answers li.wrong { border-left-color: var(--alert); }
+.qr-q { font-weight: 600; }
+.team-quiz { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius-m); padding: 14px 18px; }
+.team-quiz h3 { font-size: 17px; }
+.table-scroll { overflow-x: auto; }
+.team-quiz table { border-collapse: collapse; width: 100%; }
+.team-quiz th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.team-quiz td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.team-quiz tbody tr { cursor: pointer; }
+.team-quiz tbody tr:hover { background: var(--surface); }
 
 /* Права */
 .rights { display: grid; gap: 16px; max-width: 900px; }

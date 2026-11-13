@@ -4,7 +4,8 @@ import { keys } from '../hooks/queries';
 import { initials } from '../lib/format';
 import { useUi } from '../store/ui';
 import { PlanView } from './PlanView';
-import { ProgramPanel, QuizResultsPanel } from './Programs';
+import { ProgramPanel } from './Programs';
+import { QuizResultsPanel } from './QuizResults';
 
 export function Team() {
   const { internId, go } = useUi();

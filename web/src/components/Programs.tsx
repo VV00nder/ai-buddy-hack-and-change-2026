@@ -292,33 +292,3 @@ export function ProgramPanel({ internId, internName }: { internId: string; inter
     </section>
   );
 }
-
-/** Результаты тестов стажёра для наставника и руководителя. */
-export function QuizResultsPanel({ internId }: { internId: string }) {
-  const res = useQuery({ queryKey: keys.quizResults(internId), queryFn: () => api.quizResults(internId) });
-  const atts = res.data?.attempts ?? [];
-  if (atts.length === 0) return null;
-  // последняя попытка по каждому тесту
-  const last = new Map<string, (typeof atts)[number]>();
-  const tries = new Map<string, number>();
-  for (const a of atts) {
-    last.set(a.quizId, a);
-    tries.set(a.quizId, (tries.get(a.quizId) ?? 0) + 1);
-  }
-  return (
-    <section className="quiz-results" aria-label="Результаты тестов">
-      <h3>Тесты</h3>
-      <ul>
-        {[...last.values()].map((a) => (
-          <li key={a.quizId} className="row">
-            <span>{a.title}</span>
-            <span className="small">
-              <span className={a.passed ? 'pass-text' : 'overdue-text'}>{a.passed ? 'сдан' : 'не сдан'}</span>, <span className="num">{a.percent}%</span>
-              <span className="muted">, попыток: {tries.get(a.quizId)}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}

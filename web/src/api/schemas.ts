@@ -277,18 +277,22 @@ export const QuizAttempt = z.object({
   at: z.string(),
 });
 export type QuizAttempt = z.infer<typeof QuizAttempt>;
+export const QuizReviewItem = z.object({
+  text: z.string(),
+  options: z.array(z.string()),
+  chosen: z.number(),
+  correct: z.number(),
+  right: z.boolean(),
+  explain: z.string().optional(),
+});
+export type QuizReviewItem = z.infer<typeof QuizReviewItem>;
+export const AttemptView = QuizAttempt.extend({ review: z.array(QuizReviewItem).nullish().transform((v) => v ?? []) });
+export type AttemptView = z.infer<typeof AttemptView>;
+export const InternQuizResults = z.object({ intern: User, attempts: z.array(AttemptView) });
+export type InternQuizResults = z.infer<typeof InternQuizResults>;
 export const QuizResult = z.object({
   attempt: QuizAttempt,
-  review: z.array(
-    z.object({
-      text: z.string(),
-      options: z.array(z.string()),
-      chosen: z.number(),
-      correct: z.number(),
-      right: z.boolean(),
-      explain: z.string().optional(),
-    }),
-  ),
+  review: z.array(QuizReviewItem),
   stepsDone: z.array(z.string()).nullish().transform((v) => v ?? []),
 });
 export type QuizResult = z.infer<typeof QuizResult>;
