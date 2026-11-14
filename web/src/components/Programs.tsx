@@ -5,6 +5,7 @@ import type { Period, Template, TemplateStep } from '../api/schemas';
 import { keys, usePerms } from '../hooks/queries';
 import { plural } from '../lib/format';
 import { useUi } from '../store/ui';
+import { DeleteButton } from './DeleteButton';
 
 /** Раздел «Шаблоны обучения»: встроенные шаблоны и шаблоны команды. */
 export function Programs() {
@@ -58,7 +59,7 @@ export function Programs() {
               {!t.builtin && <button className="btn small" onClick={() => setEdit(t)}>Изменить</button>}
               <button className={t.builtin ? 'btn small' : 'btn ghost small'} onClick={() => setEdit(copy(t))}>Сделать копию</button>
               {!t.builtin && (
-                <button className="link small danger" disabled={del.isPending} onClick={() => del.mutate(t.id)}>Удалить</button>
+                <DeleteButton what={`шаблон «${t.name}»`} note="Удалить шаблон? Программы стажёров, созданные по нему, не изменятся." pending={del.isPending} onConfirm={() => del.mutate(t.id)} />
               )}
             </div>
           </li>

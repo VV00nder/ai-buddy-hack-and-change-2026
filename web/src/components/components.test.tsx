@@ -25,7 +25,7 @@ import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
 import { navFor, Shell } from './Shell';
-import { DeleteButton, filterInterns, InternFilters, InternRequests, MentorsPanel, Team } from './Team';
+import { DeleteButton, filterInterns, InternFilters, InternRequests, MentorsPanel, Reminders, Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
 // В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
@@ -381,7 +381,7 @@ test('knowledge: folders, search, editor', () => {
   assert.doesNotMatch(list, /Новая инструкция/);
   const lead = html(<Knowledge />, asLead());
   assert.match(lead, /Новая инструкция/);
-  assert.match(lead, /удалить/); // пустую папку можно удалить
+  assert.match(lead, /aria-label="Удалить пустую папку «Пустая»"/); // пустую папку можно удалить — с подтверждением
   useUi.getState().go('knowledge', { docId: 'doc_1' });
   const custom = html(<Knowledge />, asLead());
   assert.match(custom, /Инструкция команды, Мария/);
@@ -419,6 +419,8 @@ test('quizzes: list, runner, review, editor', () => {
   assert.doesNotMatch(list, /Новый тест/);
   assert.match(html(<Quizzes />, asLead()), /Новый тест/);
   assert.match(html(<Quizzes />, asLead()), /Изменить/);
+  // удаление теста — в два шага, с подтверждением
+  assert.match(html(<Quizzes />, asLead()), /aria-label="Удалить тест «/);
   const run = html(<QuizRunner id="quiz-dayoff" onExit={() => undefined} />);
   assert.match(run, /Кто согласует\?/);
   assert.match(run, /Отвечено 0 из 1/);
@@ -481,6 +483,7 @@ test('templates, programs, rights', () => {
   assert.match(p, /изменил\(а\) Олег/);
   assert.match(p, /тестов: 1/);
   assert.match(p, /Сделать копию/);
+  assert.match(p, /aria-label="Удалить шаблон «Аналитик поиска»"/);
   assert.match(p, /Добавить шаблон/);
   const qc = seeded();
   const tpls = (qc.getQueryData(keys.templates) as { templates: Parameters<typeof TemplateEditor>[0]['initial'][] }).templates;
@@ -729,4 +732,11 @@ test('interns filter: search, state, team, mentor', () => {
   assert.match(bar, /Сбросить/);
   assert.match(bar, /1 из 2/);
   assert.match(html(<Team />), /Найти: имя, шаг, программа/);
+});
+
+test('reminders: delete asks first', () => {
+  const r = html(<Reminders list={[{ id: 'r1', text: 'Проверить SEARCH-101', at: '2026-11-15T09:00:00+03:00', sent: false } as Parameters<typeof Reminders>[0]['list'][number]]} />);
+  assert.match(r, /Проверить SEARCH-101/);
+  assert.match(r, /aria-label="Удалить напоминание «Проверить SEARCH-101»"/);
+  assert.doesNotMatch(r, /Да, удалить/);
 });

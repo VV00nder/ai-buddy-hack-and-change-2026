@@ -389,7 +389,7 @@ export function Reminders({ list }: { list: Reminder[] }) {
             <li key={r.id}>
               <span>{r.text}</span>
               <span className="small muted">{dayMonth(r.at)}, {time(r.at)}</span>
-              <button className="link small" aria-label={`Удалить напоминание «${r.text}»`} disabled={del.isPending} onClick={() => del.mutate(r.id)}>✕</button>
+              <DeleteButton what={`напоминание «${r.text}»`} note="Удалить напоминание?" pending={del.isPending} onConfirm={() => del.mutate(r.id)} />
             </li>
           ))}
         </ul>

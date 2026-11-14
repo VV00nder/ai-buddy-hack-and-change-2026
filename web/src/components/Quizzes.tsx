@@ -4,6 +4,7 @@ import { api, type QuizInput } from '../api/client';
 import type { Me, QuizFull, QuizInfo, QuizLock, QuizQuestion, QuizResult } from '../api/schemas';
 import { keys, useMe, usePerms } from '../hooks/queries';
 import { useUi } from '../store/ui';
+import { DeleteButton } from './DeleteButton';
 import { TeamQuizResults } from './QuizResults';
 import { plural } from '../lib/format';
 
@@ -50,7 +51,10 @@ function QuizCard({ q, onOpen, onEdit }: { q: QuizInfo; onOpen: () => void; onEd
   const toast = useUi((s) => s.toast);
   const del = useMutation({
     mutationFn: () => api.deleteQuiz(q.id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.quizzes }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.quizzes });
+      toast('Тест удалён');
+    },
     onError: (e) => toast(e.message, 'error'),
   });
   const state = q.passed ? 'passed' : q.attempts > 0 ? 'failed' : 'new';
@@ -72,7 +76,7 @@ function QuizCard({ q, onOpen, onEdit }: { q: QuizInfo; onOpen: () => void; onEd
         {q.editable && (
           <>
             <button className="link small" onClick={onEdit}>Изменить</button>
-            <button className="link small danger" disabled={del.isPending} onClick={() => del.mutate()}>Удалить</button>
+            <DeleteButton what={`тест «${q.title}»`} note="Удалить тест? Результаты прошлых попыток останутся в истории." pending={del.isPending} onConfirm={() => del.mutate()} />
           </>
         )}
       </div>

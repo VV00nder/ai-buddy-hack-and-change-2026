@@ -161,7 +161,10 @@ function FolderItem({ node, docId, onOpen, canEdit }: { node: FolderNode; docId:
   const toast = useUi((s) => s.toast);
   const del = useMutation({
     mutationFn: () => api.deleteFolder(node.path),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['docs'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['docs'] });
+      toast('Папка удалена');
+    },
     onError: (e) => toast(e.message, 'error'),
   });
   return (
@@ -173,9 +176,7 @@ function FolderItem({ node, docId, onOpen, canEdit }: { node: FolderNode; docId:
           <span className="muted small">{n}</span>
         </button>
         {canEdit && n === 0 && (
-          <button className="link small" onClick={() => del.mutate()} aria-label={`Удалить пустую папку «${node.path}»`}>
-            удалить
-          </button>
+          <DeleteButton what={`пустую папку «${node.path}»`} note="Удалить папку?" pending={del.isPending} onConfirm={() => del.mutate()} />
         )}
       </div>
       {open && <Tree node={node} docId={docId} onOpen={onOpen} canEdit={canEdit} />}
