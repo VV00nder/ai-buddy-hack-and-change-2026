@@ -782,13 +782,14 @@ type docView struct {
 	Body      string              `json:"body,omitempty"`
 	UpdatedBy string              `json:"updatedBy,omitempty"`
 	UpdatedAt string              `json:"updatedAt,omitempty"`
+	Source    string              `json:"source,omitempty"`
 	Sections  []knowledge.Section `json:"sections,omitempty"`
 }
 
 func (s *Server) docView(r *http.Request, d *knowledge.Doc, full bool) docView {
 	u := sessionFrom(r).User
 	v := docView{ID: d.ID, Title: d.Title, Tags: d.Tags, Folder: d.Folder, Custom: d.Custom, Editable: s.app.CanEditDoc(r.Context(), u, d),
-		UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt}
+		UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt, Source: d.Source}
 	if v.Tags == nil {
 		v.Tags = []string{}
 	}

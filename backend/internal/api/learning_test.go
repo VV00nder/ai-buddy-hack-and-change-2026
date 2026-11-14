@@ -130,11 +130,12 @@ func TestRightsAndKBEditing(t *testing.T) {
 			t.Fatalf("validation %v: %d", bad, code)
 		}
 	}
-	if code := elena.do("PUT", "/api/kb/tool-stash-keys", doc, nil); code != 400 {
-		t.Fatal("builtin edit")
+	// общие инструкции правит руководитель (или администратор), сотрудник с правом — только инструкции своего отдела
+	if code := elena.do("PUT", "/api/kb/tool-stash-keys", doc, nil); code != 403 {
+		t.Fatal("builtin edit by kb grant")
 	}
-	if code := elena.do("DELETE", "/api/kb/tool-stash-keys", nil, nil); code != 400 {
-		t.Fatal("builtin delete")
+	if code := elena.do("DELETE", "/api/kb/tool-stash-keys", nil, nil); code != 403 {
+		t.Fatal("builtin delete by kb grant")
 	}
 	if code := elena.do("PUT", "/api/kb/none", doc, nil); code != 404 {
 		t.Fatal("edit missing")

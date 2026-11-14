@@ -109,7 +109,7 @@ func TestAdmin(t *testing.T) {
 	if code := admin.do("POST", "/api/rights", map[string]any{"userId": "u-dmitry", "perm": "approvals", "enabled": true}, &rights); code != 200 {
 		t.Fatalf("grant: %d", code)
 	}
-	// общая инструкция администратора видна всем отделам, руководитель её не правит
+	// общая инструкция администратора видна всем отделам; руководители тоже могут её поправить
 	doc := map[string]any{"title": "Политика паролей", "folder": "Безопасность", "audience": []string{"all"}, "body": "## Пароли\n\nНе короче 12 символов и не повторяются между сервисами."}
 	var created docView
 	if code := admin.do("POST", "/api/kb", doc, &created); code != 201 {
@@ -120,7 +120,7 @@ func TestAdmin(t *testing.T) {
 	if !slices.ContainsFunc(list.Docs, func(d docView) bool { return d.ID == created.ID }) {
 		t.Fatal("company doc visible to another team")
 	}
-	if code := maria.do("PUT", "/api/kb/"+created.ID, doc, nil); code != 403 {
+	if code := maria.do("PUT", "/api/kb/"+created.ID, doc, nil); code != 200 {
 		t.Fatalf("lead edits company doc: %d", code)
 	}
 	// флаги: выключенные заявки на отгул перестают создаваться

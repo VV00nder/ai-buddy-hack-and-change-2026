@@ -237,7 +237,12 @@ check('сводка о стажёре при наведении', await page.loc
 await caption('Кабинет: все стажёры, отметки о просрочках и сводка при наведении — без лишних переходов', 2600);
 await page.locator('.cab-interns tbody tr').first().click();
 await page.locator('.intern-requests').waitFor();
+// когда ничего не ждёт решения, заявки свёрнуты в сводку — раскрываются по клику
+const irHead = page.locator('.intern-requests .ir-head').first();
+if ((await irHead.getAttribute('aria-expanded')) === 'false') await irHead.click();
 check('заявки стажёра в карточке', (await page.locator('.intern-requests .req').count()) >= 2);
+await irHead.click();
+check('заявки стажёра сворачиваются', (await page.locator('.intern-requests .req').count()) === 0);
 await page.getByLabel('Добавить наставника').selectOption({ label: 'Юрий Ларин' });
 await page.locator('.mentor-add').getByRole('button', { name: 'Добавить' }).click();
 await page.locator('.mentor-chip', { hasText: 'Юрий Ларин' }).waitFor();

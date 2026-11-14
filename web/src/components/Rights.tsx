@@ -78,7 +78,14 @@ export function Rights() {
                         onChange={() => m.mutate({ userId: mem.user.id, perm: r.perm, enabled: !on })}
                         aria-label={`${r.title}: ${mem.user.name}`}
                       />
-                      <span className="small">{on ? 'выдано' : 'нет'}</span>
+                      <span className="small">
+                        {/* на телефоне заголовков таблицы нет — подписываем право прямо у переключателя */}
+                        <span className="cell-label">
+                          {r.title}
+                          <span className="muted cell-hint">{r.hint}</span>
+                        </span>
+                        <span className={on ? 'right-on' : 'muted'}>{on ? 'выдано' : 'нет'}</span>
+                      </span>
                     </label>
                   </td>
                 );

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { InternCard, Reminder, User } from '../api/schemas';
 import { keys, useMe } from '../hooks/queries';
@@ -261,70 +261,85 @@ export function InternRequests({ internId, compact = false }: { internId: string
     },
     onError: (e) => toast(e.message, 'error'),
   });
+  // свёрнуто, пока ничего не ждёт решения или ответа; раскрыть и свернуть можно в любой момент
+  // (начальное состояние фиксируется при первой загрузке, чтобы после решения блок не схлопывался сам)
+  const [expanded, setExpanded] = useState<boolean | null>(null);
+  const initial = useRef<boolean | null>(null);
   if (q.isPending) return null;
   if (q.isError) return <p className="error small">Заявки не загрузились: {q.error.message}</p>;
   const { canDelete, canAnswer, questions } = q.data;
   const list = [...q.data.requests].sort((a, b) => Number(b.status === 'submitted') - Number(a.status === 'submitted'));
   const open = list.filter((r) => r.status === 'submitted').length;
+  const openQ = questions.filter((x) => x.status === 'open').length;
+  const needsMe = list.some((r) => r.awaitingMe) || (canAnswer && openQ > 0);
+  if (initial.current === null) initial.current = needsMe;
+  const show = expanded ?? initial.current;
+  const bodyId = `ir-body-${internId}`;
   return (
-    <section className={`intern-requests ${compact ? 'compact' : ''}`} aria-labelledby={`ir-title-${internId}`}>
-      <div className="row">
+    <section className={`intern-requests ${compact ? 'compact' : ''} ${show ? '' : 'collapsed'}`} aria-labelledby={`ir-title-${internId}`}>
+      <button type="button" className="ir-head" aria-expanded={show} aria-controls={bodyId} onClick={() => setExpanded(!show)}>
+        <span className={`chev ${show ? 'open' : ''}`} aria-hidden="true" />
         <h3 id={`ir-title-${internId}`}>Заявки стажёра</h3>
         <span className="small muted">
           {open > 0 ? `${open} не согласовано` : 'все решены'} · всего {list.length}
+          {questions.length > 0 && ` · вопросов ${questions.length}${openQ ? `, без ответа ${openQ}` : ''}`}
         </span>
-      </div>
-      {list.length === 0 && <p className="small muted">Стажёр ещё не отправлял заявок.</p>}
-      <ul className="req-list">
-        {list.map((r) => (
-          <li key={r.id} className={`req req-${r.status} ${r.awaitingMe ? 'req-mine' : ''}`}>
-            {r.approval ? (
-              // заявка ждёт решения текущего пользователя — согласовать или отказать прямо здесь
-              <ApprovalRow a={r.approval} compact />
-            ) : (
-              <>
-                <span className="req-title">{r.title}</span>
-                <span className={`stamp stamp-${r.status}`}>{r.awaitingMe ? 'ждёт вашего решения' : reqStatus[r.status]}</span>
-                <span className="small muted">
-                  {dayMonth(r.createdAt)}, {time(r.createdAt)}
-                  {r.externalId && ` · ${r.externalId}`}
-                </span>
-                {r.comment && <span className="small">«{r.comment}»</span>}
-              </>
-            )}
-            {canDelete && <DeleteButton what={`заявку «${r.title}»`} pending={delReq.isPending} onConfirm={() => delReq.mutate(r.id)} />}
-          </li>
-        ))}
-      </ul>
-      {questions.length > 0 && (
-        <>
-          <h3 className="ir-sub">Вопросы наставнику</h3>
+      </button>
+      {show && (
+        <div id={bodyId} className="ir-body">
+          {list.length === 0 && <p className="small muted">Стажёр ещё не отправлял заявок.</p>}
           <ul className="req-list">
-            {questions.map((x) => (
-              <li key={x.id} className={`req req-q-${x.status}`}>
-                <span className="req-title">«{x.text}»</span>
-                <span className={`stamp ${x.status === 'open' ? 'stamp-submitted' : 'stamp-approved'}`}>{x.status === 'open' ? 'ждёт ответа' : 'отвечен'}</span>
-                <span className="small muted">
-                  {dayMonth(x.createdAt)}, {time(x.createdAt)}
-                  {x.mentorName && ` · ${x.mentorName}`}
-                </span>
-                {x.answer && (
-                  <span className="small">
-                    Ответ{x.answeredBy && ` (${x.answeredBy})`}: {x.answer}
-                  </span>
+            {list.map((r) => (
+              <li key={r.id} className={`req req-${r.status} ${r.awaitingMe ? 'req-mine' : ''}`}>
+                {r.approval ? (
+                  // заявка ждёт решения текущего пользователя — согласовать или отказать прямо здесь
+                  <ApprovalRow a={r.approval} compact />
+                ) : (
+                  <>
+                    <span className="req-title">{r.title}</span>
+                    <span className={`stamp stamp-${r.status}`}>{r.awaitingMe ? 'ждёт вашего решения' : reqStatus[r.status]}</span>
+                    <span className="small muted">
+                      {dayMonth(r.createdAt)}, {time(r.createdAt)}
+                      {r.externalId && ` · ${r.externalId}`}
+                    </span>
+                    {r.comment && <span className="small">«{r.comment}»</span>}
+                  </>
                 )}
-                {canAnswer && x.status === 'open' && (
-                  <AnswerForm
-                    q={{ id: x.id, internId, mentorId: '', text: x.text, status: 'open', createdAt: x.createdAt }}
-                    who={x.mentorName ? `Наставники: ${x.mentorName}` : 'Вопрос стажёра'}
-                    compact
-                  />
-                )}
-                {canDelete && <DeleteButton what="вопрос" pending={delQ.isPending} onConfirm={() => delQ.mutate(x.id)} />}
+                {canDelete && <DeleteButton what={`заявку «${r.title}»`} pending={delReq.isPending} onConfirm={() => delReq.mutate(r.id)} />}
               </li>
             ))}
           </ul>
-        </>
+          {questions.length > 0 && (
+            <>
+              <h3 className="ir-sub">Вопросы наставнику</h3>
+              <ul className="req-list">
+                {questions.map((x) => (
+                  <li key={x.id} className={`req req-q-${x.status}`}>
+                    <span className="req-title">«{x.text}»</span>
+                    <span className={`stamp ${x.status === 'open' ? 'stamp-submitted' : 'stamp-approved'}`}>{x.status === 'open' ? 'ждёт ответа' : 'отвечен'}</span>
+                    <span className="small muted">
+                      {dayMonth(x.createdAt)}, {time(x.createdAt)}
+                      {x.mentorName && ` · ${x.mentorName}`}
+                    </span>
+                    {x.answer && (
+                      <span className="small">
+                        Ответ{x.answeredBy && ` (${x.answeredBy})`}: {x.answer}
+                      </span>
+                    )}
+                    {canAnswer && x.status === 'open' && (
+                      <AnswerForm
+                        q={{ id: x.id, internId, mentorId: '', text: x.text, status: 'open', createdAt: x.createdAt }}
+                        who={x.mentorName ? `Наставники: ${x.mentorName}` : 'Вопрос стажёра'}
+                        compact
+                      />
+                    )}
+                    {canDelete && <DeleteButton what="вопрос" pending={delQ.isPending} onConfirm={() => delQ.mutate(x.id)} />}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
     </section>
   );

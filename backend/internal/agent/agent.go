@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -249,4 +250,20 @@ func (a *Agent) LLMStatus() string {
 		return "ok"
 	}
 	return a.lastErr + " (" + a.lastAt.Format("15:04:05") + ")"
+}
+
+// ErrOffline — языковая модель не подключена.
+var ErrOffline = errors.New("agent: offline")
+
+// Complete — одиночный запрос к модели без инструментов (например, оформить текст инструкции).
+func (a *Agent) Complete(ctx context.Context, system, user string) (string, error) {
+	if a.d.LLM == nil {
+		return "", ErrOffline
+	}
+	m, err := a.d.LLM.Chat(ctx, []llm.Message{{Role: "system", Content: system}, {Role: "user", Content: user}}, nil)
+	a.noteLLM(err)
+	if err != nil {
+		return "", err
+	}
+	return m.Content, nil
 }

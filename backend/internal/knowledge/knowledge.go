@@ -40,6 +40,8 @@ type Doc struct {
 	Body      string
 	UpdatedBy string
 	UpdatedAt string
+	// Source — откуда документ: "answer" — оформлен из ответа на вопрос стажёра.
+	Source string
 }
 
 // Section — раздел документа (единица поиска).
@@ -256,8 +258,12 @@ func (b *Base) Upsert(d *Doc) {
 	d.Sections = ParseSections(d.Title, d.Body)
 	b.removeChunks(d.ID)
 	b.docs[d.ID] = d
+	kind := "doc"
+	if d.Source == "answer" {
+		kind = "faq" // ответы наставников команды ранжируются выше
+	}
 	for _, s := range d.Sections {
-		b.addChunk(&chunk{doc: d, section: s, kind: "doc"})
+		b.addChunk(&chunk{doc: d, section: s, kind: kind})
 	}
 	b.reindex()
 }

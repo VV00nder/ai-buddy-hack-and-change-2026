@@ -243,7 +243,7 @@ test('plan and today panel', () => {
 test('mentor and lead screens', () => {
   assert.match(html(<Inbox />), /Где стенд\?/);
   assert.match(html(<Inbox />), /в базе знаний/);
-  assert.match(html(<AnswerForm q={{ id: 'q', internId: 'u', mentorId: 'm', text: 'Вопрос?', status: 'open', createdAt: '' }} who="Анна" />), /Сохранить в базу знаний/);
+  assert.match(html(<AnswerForm q={{ id: 'q', internId: 'u', mentorId: 'm', text: 'Вопрос?', status: 'open', createdAt: '' }} who="Анна" />), /Сохранить как инструкцию/);
   const noQ = seeded();
   noQ.setQueryData(keys.inbox, { questions: [] });
   assert.match(html(<Inbox />, noQ), /Новых вопросов нет/);
@@ -401,6 +401,11 @@ test('knowledge: folders, search, editor', () => {
   assert.match(ed, /Кому видна/);
   assert.match(ed, /value="релиз"/);
   assert.match(html(<DocEditor folders={[]} onDone={() => undefined} />), /Новая инструкция/);
+  // инструкция, оформленная из ответа наставника, подписана; удаление — с подтверждением, без системного диалога
+  const fromAnswer = html(<DocView doc={{ ...doc, source: 'answer', updatedBy: 'Олег Кузнецов' }} onEdit={() => undefined} />, qc);
+  assert.match(fromAnswer, /Из ответа на вопрос, Олег Кузнецов/);
+  assert.match(fromAnswer, /aria-label="Удалить инструкцию «/);
+  assert.match(builtin, /id="kb-doc"/);
   assert.match(html(<FolderForm value="X" onChange={() => undefined} onDone={() => undefined} />), /не глубже 4 уровней/);
 });
 
@@ -520,6 +525,8 @@ test('templates, programs, rights', () => {
   assert.match(r, /Согласование заявок/);
   assert.match(r, /выдано/);
   assert.match(r, /Елена/);
+  // на телефоне заголовков таблицы нет: название права подписано у каждого переключателя
+  assert.match(r, /class="cell-label">Инструкции и тесты/);
   assert.match(html(<Rights />, makeQueryClient()), /Загружаю команду/);
   useUi.getState().go('team', { internId: 'u-anna' });
   const detail = html(<Team />, asLead());
@@ -674,6 +681,19 @@ test('admin: nav, service, all employees; reject with reason; requests inline', 
   assert.match(html(<DeleteButton what="заявку" pending={false} onConfirm={() => undefined} />), /aria-label="Удалить заявку"/);
   assert.match(inline, /intern-requests compact/);
   assert.match(inline, />Отказать</);
+  assert.match(inline, /aria-expanded="true"/);
+  // когда ничего не ждёт решения или ответа, заявки свёрнуты — видна только сводка
+  const quiet = seeded();
+  const base = quiet.getQueryData<{ requests: { awaitingMe?: boolean; approval?: unknown }[]; questions: { status: string }[] }>(keys.internRequests('u-anna'))!;
+  quiet.setQueryData(keys.internRequests('u-anna'), {
+    ...base,
+    requests: base.requests.map((r) => ({ ...r, awaitingMe: false, approval: undefined })),
+    questions: base.questions.map((x) => ({ ...x, status: 'answered' })),
+  });
+  const folded = html(<InternRequests internId="u-anna" />, quiet);
+  assert.match(folded, /aria-expanded="false"/);
+  assert.match(folded, /всего \d/);
+  assert.doesNotMatch(folded, /req-list/);
 });
 
 test('mentors panel: several mentors, lead edits', () => {

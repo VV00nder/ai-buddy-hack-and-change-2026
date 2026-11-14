@@ -26,6 +26,8 @@ type KBDoc struct {
 	Body      string   `json:"body"`
 	UpdatedBy string   `json:"updatedBy"`
 	UpdatedAt string   `json:"updatedAt"`
+	// Source — "answer", если инструкция оформлена из ответа на вопрос стажёра.
+	Source string `json:"source,omitempty"`
 }
 
 // DocInput — поля инструкции из редактора.
@@ -37,6 +39,13 @@ type DocInput struct {
 	Body     string   `json:"body"`
 }
 
+// kbHidden — пометка об удалённой инструкции.
+type kbHidden struct {
+	ID string `json:"id"`
+	By string `json:"by"`
+	At string `json:"at"`
+}
+
 // KBFolder — пустая папка, созданная заранее.
 type KBFolder struct {
 	Path string `json:"path"`
@@ -45,7 +54,7 @@ type KBFolder struct {
 
 func (d KBDoc) toDoc() *knowledge.Doc {
 	return &knowledge.Doc{ID: d.ID, Title: d.Title, Folder: d.Folder, Audience: d.Audience, Team: d.Team, Tags: d.Tags,
-		Body: d.Body, Custom: true, UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt}
+		Body: d.Body, Custom: true, UpdatedBy: d.UpdatedBy, UpdatedAt: d.UpdatedAt, Source: d.Source}
 }
 
 // LoadKB поднимает инструкции, добавленные в интерфейсе.
@@ -57,12 +66,24 @@ func (a *App) LoadKB(ctx context.Context) error {
 	for _, d := range docs {
 		a.kb.Upsert(d.toDoc())
 	}
+	// удалённые инструкции (в том числе встроенные) не возвращаются после перезапуска
+	hidden, err := listRec[kbHidden](ctx, a.store, recKBHidden)
+	if err != nil {
+		return err
+	}
+	for _, h := range hidden {
+		a.kb.Delete(h.ID)
+	}
 	return nil
 }
 
-// CanEditDoc — можно ли пользователю править документ.
+// CanEditDoc — можно ли пользователю править и удалять инструкцию: администратор — любую,
+// руководитель — своего отдела и общие, сотрудник с правом на инструкции — своего отдела.
 func (a *App) CanEditDoc(ctx context.Context, u domain.User, d *knowledge.Doc) bool {
-	return d.Custom && sameTeam(u, d.Team) && a.canEditKB(ctx, u)
+	if !a.canEditKB(ctx, u) {
+		return false
+	}
+	return isAdmin(u) || d.Team == u.Team || (d.Team == "all" && u.Role == domain.RoleLead)
 }
 
 var validAudience = []string{"all", string(domain.RoleIntern), string(domain.RoleMentor), string(domain.RoleLead), string(domain.RoleHRBP), string(domain.RoleEngineer)}
@@ -123,7 +144,7 @@ func (a *App) SaveDoc(ctx context.Context, u domain.User, id string, in DocInput
 	if err != nil {
 		return nil, err
 	}
-	team := contentTeam(u)
+	team, source := contentTeam(u), ""
 	if id == "" {
 		id = newID("doc")
 	} else {
@@ -131,15 +152,13 @@ func (a *App) SaveDoc(ctx context.Context, u domain.User, id string, in DocInput
 		switch {
 		case !ok:
 			return nil, ErrNotFound
-		case !cur.Custom:
-			return nil, invalid("Встроенную инструкцию нельзя изменить — создайте новую")
-		case !sameTeam(u, cur.Team):
+		case !a.CanEditDoc(ctx, u, cur):
 			return nil, ErrForbidden
 		}
-		team = cur.Team // правка не переносит инструкцию в другой отдел
+		team, source = cur.Team, cur.Source // правка не переносит инструкцию в другой отдел
 	}
 	rec := KBDoc{ID: id, Title: in.Title, Folder: in.Folder, Audience: in.Audience, Team: team, Tags: in.Tags, Body: in.Body,
-		UpdatedBy: u.Name, UpdatedAt: a.now().Format(time.RFC3339)}
+		UpdatedBy: u.Name, UpdatedAt: a.now().Format(time.RFC3339), Source: source}
 	if err := putRec(ctx, a.store, recKBDoc, id, rec); err != nil {
 		return nil, err
 	}
@@ -156,15 +175,17 @@ func (a *App) DeleteDoc(ctx context.Context, u domain.User, id string) error {
 		return ErrNotFound
 	}
 	if !a.CanEditDoc(ctx, u, cur) {
-		if !cur.Custom {
-			return invalid("Встроенную инструкцию нельзя удалить")
-		}
 		return ErrForbidden
 	}
 	if err := a.store.DeleteRecord(ctx, recKBDoc, id); err != nil {
 		return err
 	}
+	// пометка нужна встроенным инструкциям и ответам наставников, чтобы они не вернулись при запуске
+	if err := putRec(ctx, a.store, recKBHidden, id, kbHidden{ID: id, By: u.ID, At: a.now().Format(time.RFC3339)}); err != nil {
+		return err
+	}
 	a.kb.Delete(id)
+	a.Track(ctx, u.ID, "kb_doc_deleted", map[string]any{"doc": id})
 	return nil
 }
 

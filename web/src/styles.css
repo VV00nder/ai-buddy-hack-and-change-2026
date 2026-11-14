@@ -389,6 +389,8 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .rights th { text-align: left; font-size: 14px; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
 .th-hint { display: block; font-weight: 400; }
 .rights td { padding: 12px 10px; border-bottom: 1px solid var(--line); }
+.rights .cell-label { display: none; }
+.rights .right-on { color: var(--ok, #12805c); font-weight: 600; }
 .switch { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
 .switch input { appearance: none; width: 36px; height: 20px; border-radius: 10px; background: var(--line); position: relative; cursor: pointer; padding: 0; border: 0; transition: background 0.15s; }
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
@@ -466,6 +468,8 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
   .se-row { flex-direction: column; align-items: flex-start; }
   .rights thead { display: none; }
   .rights td { display: block; border: 0; padding: 4px 0; }
+  .rights .cell-label { display: block; font-weight: 600; color: var(--ink); font-size: 14px; }
+  .rights .cell-hint { display: block; font-weight: 400; font-size: 12px; margin-bottom: 2px; }
   .rights tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .quiz-score { flex-direction: column; align-items: flex-start; }
 }
@@ -530,7 +534,11 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .rem-list li .muted { grid-column: 1; }
 .rem-list li .link { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 .intern-requests { border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 16px; display: grid; gap: 8px; }
-.intern-requests h3 { font-size: 16px; }
+.intern-requests h3 { font-size: 16px; margin: 0; }
+.intern-requests .ir-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.intern-requests .ir-head .small { margin-left: auto; }
+.intern-requests .ir-body { display: grid; gap: 8px; }
+.intern-requests.collapsed { padding-block: 10px; }
 .req-list { display: grid; gap: 4px; }
 .req { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 6px 8px; border-radius: var(--radius-s); }
 .req-submitted { background: var(--surface); }
@@ -650,3 +658,17 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .intern-filters { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-bottom: 8px; }
 .intern-filters input { flex: 1 1 200px; max-width: 280px; padding: 6px 10px; font-size: 14px; }
 .intern-filters select { font-size: 13px; padding: 5px 6px; max-width: 240px; }
+
+/* Инструкции: список и статья прокручиваются отдельно — поиск не сдвигает открытую статью */
+@media (min-width: 761px) {
+  .view-knowledge .content { overflow: hidden; display: flex; flex-direction: column; }
+  .view-knowledge .kb { flex: 1; min-height: 0; width: 100%; }
+  .kb-list, .kb-doc { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .kb-list { padding-right: 8px; scrollbar-gutter: stable; }
+  .kb-doc { padding-right: 8px; padding-bottom: 24px; }
+}
+@media (max-width: 760px) {
+  .kb-list { max-height: 42dvh; overflow-y: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+}
+.doc-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.doc-actions .req-del { margin-left: 0; }

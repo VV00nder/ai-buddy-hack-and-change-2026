@@ -306,21 +306,38 @@ func (a *App) AnswerQuestion(ctx context.Context, s kv.Session, qid, answer stri
 	if q.AddToFAQ {
 		f := domain.FAQEntry{ID: q.ID, Team: intern.Team, Question: q.Text, Answer: answer, AuthorID: u.ID, CreatedAt: now}
 		if err := a.store.AddFAQ(ctx, f); err == nil {
-			a.kb.AddFAQ(f)
+			if err := a.saveAnswerDoc(ctx, f, u.Name, true); err != nil {
+				a.log.Warn("answer doc", "err", err)
+			}
 		}
 	}
 	a.Track(ctx, u.ID, "mentor_answered", map[string]any{"faq": q.AddToFAQ})
 	return q, nil
 }
 
-// LoadFAQ поднимает сохранённые ответы наставников в базу знаний при старте.
+// LoadFAQ переносит ответы наставников, сохранённые до появления оформления,
+// в обычные инструкции (разложенные по папкам). Вызывается после LoadKB:
+// уже оформленные и удалённые ответы пропускаются.
 func (a *App) LoadFAQ(ctx context.Context) error {
 	faqs, err := a.store.FAQs(ctx)
 	if err != nil {
 		return err
 	}
 	for _, f := range faqs {
-		a.kb.AddFAQ(f)
+		id := "faq-" + f.ID
+		if _, ok := a.kb.Raw(id); ok {
+			continue
+		}
+		if _, err := getRec[kbHidden](ctx, a.store, recKBHidden, id); err == nil {
+			continue
+		}
+		who := "Наставник"
+		if au, ok := a.userByID(ctx, f.AuthorID); ok {
+			who = au.Name
+		}
+		if err := a.saveAnswerDoc(ctx, f, who, false); err != nil {
+			a.log.Warn("answer doc: migrate", "id", f.ID, "err", err)
+		}
 	}
 	return nil
 }

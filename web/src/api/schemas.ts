@@ -226,6 +226,7 @@ export const DocSummary = z.object({
   folder: z.string().optional().default(''),
   custom: z.boolean().optional().default(false),
   editable: z.boolean().optional().default(false),
+  source: z.string().optional(),
 });
 export type DocSummary = z.infer<typeof DocSummary>;
 export const Doc = DocSummary.extend({

@@ -25,6 +25,7 @@ import (
 	"aibuddy/internal/identity"
 	"aibuddy/internal/knowledge"
 	"aibuddy/internal/kv"
+	"aibuddy/internal/llm"
 	"aibuddy/internal/mcp"
 	"aibuddy/internal/onboarding"
 	"aibuddy/internal/store"
@@ -44,6 +45,12 @@ type testEnv struct {
 
 func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 	t.Helper()
+	return newTestEnvModel(t, ff, webDir, nil)
+}
+
+// newTestEnvModel — окружение с подключённой (поддельной) языковой моделью.
+func newTestEnvModel(t *testing.T, ff flags.Flags, webDir string, model llm.Client) *testEnv {
+	t.Helper()
 	e := &testEnv{t: t, clock: time.Date(2026, 11, 10, 12, 0, 0, 0, msk)}
 	now := func() time.Time { return e.clock }
 	svc, _ := corp.New(now, msk)
@@ -56,7 +63,7 @@ func newTestEnv(t *testing.T, ff flags.Flags, webDir string) *testEnv {
 	corpClient := mcp.NewClient(e.corpTS.URL+"/mcp", 2*time.Second)
 	plan := func(ctx context.Context, u domain.User) (onboarding.Plan, error) { return e.app.PlanFor(ctx, u) }
 	goals := func(ctx context.Context, u domain.User) ([]domain.Goal, error) { return e.app.Goals(ctx, u, u.ID) }
-	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now,
+	ag := agent.New(agent.Deps{KB: kb, Corp: corpClient, Plan: plan, Goals: goals, Now: now, LLM: model,
 		SetStep: func(ctx context.Context, u domain.User, step string, st domain.StepStatus) (onboarding.Plan, error) {
 			return e.app.SetStep(ctx, u, u.ID, step, st, "")
 		},

@@ -6,6 +6,7 @@ import { keys, usePerms } from '../hooks/queries';
 import { plural } from '../lib/format';
 import { Markdown } from '../lib/markdown';
 import { useUi } from '../store/ui';
+import { DeleteButton } from './DeleteButton';
 
 /** Узел дерева папок. */
 export interface FolderNode {
@@ -66,6 +67,10 @@ export function Knowledge() {
   const open = (id: string) => {
     setEditing(null);
     go('knowledge', { docId: id });
+    // на телефоне список над статьёй — переводим взгляд к открытой инструкции
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches) {
+      requestAnimationFrame(() => document.getElementById('kb-doc')?.scrollIntoView({ block: 'start' }));
+    }
   };
 
   return (
@@ -91,9 +96,9 @@ export function Knowledge() {
           </>
         )}
       </nav>
-      <article className="kb-doc">
+      <article className="kb-doc" id="kb-doc">
         {editing === 'new' && <DocEditor folders={folders} onDone={(id) => (id ? open(id) : setEditing(null))} />}
-        {editing === 'edit' && doc.data && <DocEditor doc={doc.data} folders={folders} onDone={() => setEditing(null)} />}
+        {editing === 'edit' && doc.data && <DocEditor key={doc.data.id} doc={doc.data} folders={folders} onDone={() => setEditing(null)} />}
         {!editing && (
           <>
             {!docId && <p className="muted">Выбери инструкцию слева или спроси AI-buddy в чате — он найдёт нужный раздел сам.</p>}
@@ -228,7 +233,9 @@ export function DocView({ doc, onEdit }: { doc: Doc; onEdit: () => void }) {
     <>
       <div className="doc-meta">
         {doc.folder && <span className="muted small crumbs">{doc.folder.split('/').join(' / ')}</span>}
-        {doc.custom ? (
+        {doc.source === 'answer' ? (
+          <span className="tag team-tag" title="AI-buddy оформил ответ на вопрос стажёра как инструкцию">Из ответа на вопрос{doc.updatedBy ? `, ${doc.updatedBy}` : ''}</span>
+        ) : doc.custom ? (
           <span className="tag team-tag">Инструкция команды{doc.updatedBy ? `, ${doc.updatedBy}` : ''}</span>
         ) : (
           <p className="synthetic">Тестовая инструкция прототипа — не регламент Авито</p>
@@ -236,17 +243,9 @@ export function DocView({ doc, onEdit }: { doc: Doc; onEdit: () => void }) {
       </div>
       <h2>{doc.title}</h2>
       {doc.editable && (
-        <div className="row-start">
+        <div className="doc-actions">
           <button className="btn ghost small" onClick={onEdit}>Редактировать</button>
-          <button
-            className="link small danger"
-            disabled={del.isPending}
-            onClick={() => {
-              if (typeof window === 'undefined' || window.confirm('Удалить инструкцию? Это действие нельзя отменить.')) del.mutate();
-            }}
-          >
-            Удалить
-          </button>
+          <DeleteButton what={`инструкцию «${doc.title}»`} note="Удалить инструкцию? AI-buddy перестанет отвечать по ней." pending={del.isPending} onConfirm={() => del.mutate()} />
         </div>
       )}
       {doc.sections.map((s) => (

@@ -12,6 +12,7 @@ import (
 const (
 	recKBDoc       = "kb_doc"
 	recKBFolder    = "kb_folder"
+	recKBHidden    = "kb_hidden"
 	recQuiz        = "quiz"
 	recQuizAttempt = "quiz_attempt"
 	recTemplate    = "template"

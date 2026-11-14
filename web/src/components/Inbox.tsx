@@ -52,7 +52,7 @@ export function AnswerForm({ q, who, compact = false }: { q: Question; who: stri
   const m = useMutation({
     mutationFn: () => api.answer(q.id, answer, faq),
     onSuccess: () => {
-      toast(faq ? 'Ответ отправлен и сохранён в базу знаний' : 'Ответ отправлен стажёру');
+      toast(faq ? 'Ответ отправлен. AI-buddy оформит его как инструкцию и положит в подходящую папку' : 'Ответ отправлен стажёру');
       void qc.invalidateQueries({ queryKey: keys.inbox });
       void qc.invalidateQueries({ queryKey: ['internRequests'] });
       void qc.invalidateQueries({ queryKey: keys.dashboard });
@@ -74,7 +74,7 @@ export function AnswerForm({ q, who, compact = false }: { q: Question; who: stri
         <div className="row">
           <label className="checkbox">
             <input type="checkbox" checked={faq} onChange={(e) => setFaq(e.target.checked)} />
-            Сохранить в базу знаний команды
+            Сохранить как инструкцию (AI-buddy оформит и разложит по папкам)
           </label>
           <button className="btn" disabled={m.isPending || answer.trim().length < 2}>Ответить</button>
         </div>
