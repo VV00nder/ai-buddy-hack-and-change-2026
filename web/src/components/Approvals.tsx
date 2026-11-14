@@ -165,7 +165,7 @@ export function ApprovalRow({ a, compact = false }: { a: Approval; compact?: boo
           {withComment ? (
             <label className="field">
               <span className="small">Комментарий стажёру</span>
-              <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} placeholder="Необязательно" />
+              <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Необязательно" />
             </label>
           ) : null}
           <div className="note-actions">
@@ -211,7 +211,6 @@ export function RejectForm(p: { kind: string; reason: string; onReason: (v: stri
         <textarea
           value={p.reason}
           onChange={(e) => p.onReason(e.target.value)}
-          maxLength={500}
           rows={2}
           required
           minLength={3}

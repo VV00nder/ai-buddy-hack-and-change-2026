@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { Plan, StepStatus, StepView } from '../api/schemas';
-import { keys, usePlan, useSend, useSetStep } from '../hooks/queries';
+import { keys, useMe, usePlan, useSend, useSetStep } from '../hooks/queries';
 import { dayMonth, stepStatusName } from '../lib/format';
 import { useUi } from '../store/ui';
 import { Goals } from './Goals';
@@ -18,6 +18,9 @@ export function PlanView({ internId }: { internId?: string }) {
 }
 
 export function PlanBody({ plan, internId, internName }: { plan: Plan; internId?: string; internName?: string }) {
+  // цели ставят и убирают руководитель, наставник и администратор (не HR BP)
+  const role = useMe().data?.user.role;
+  const goalEditor = role === 'lead' || role === 'mentor' || role === 'admin';
   return (
     <section className="plan">
       <header className="plan-head">
@@ -38,7 +41,7 @@ export function PlanBody({ plan, internId, internName }: { plan: Plan; internId?
           <span className="num">{plan.percent}%</span>
         </div>
       </header>
-      <Goals internId={internId} canAdd={!!internId} steps={plan.periods.flatMap((p) => p.steps)} />
+      <Goals internId={internId} canAdd={!!internId && goalEditor} steps={plan.periods.flatMap((p) => p.steps)} />
       <ol className="periods">
         {plan.periods.map((per) => (
           <li key={per.id} className={`period period-${per.state}`}>

@@ -228,6 +228,13 @@ func (m *Memory) SaveGoal(_ context.Context, g domain.Goal) error {
 	return nil
 }
 
+func (m *Memory) DeleteGoal(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.goals, id)
+	return nil
+}
+
 func (m *Memory) Goal(_ context.Context, id string) (domain.Goal, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

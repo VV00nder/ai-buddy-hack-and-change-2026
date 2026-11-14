@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/dashboard", s.dashboard)
 	auth("GET /api/team/{intern}/requests", s.internRequests)
 	auth("DELETE /api/team/{intern}/requests/{id}", s.deleteRequest)
+	auth("DELETE /api/goals/{id}", s.deleteGoal)
 	auth("GET /api/requests", s.allRequests)
 	auth("DELETE /api/team/{intern}/questions/{id}", s.deleteQuestion)
 	auth("PUT /api/team/{intern}/mentors", s.setMentors)
@@ -245,7 +246,7 @@ func (s *Server) fail(w http.ResponseWriter, err error) {
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	body := http.MaxBytesReader(w, r.Body, 64<<10)
+	body := http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := json.NewDecoder(body).Decode(v); err != nil && !errors.Is(err, io.EOF) {
 		writeErr(w, 400, "invalid", "Некорректный JSON")
 		return false
@@ -1228,4 +1229,12 @@ func (s *Server) allRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"requests": rs})
+}
+
+func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.DeleteGoal(r.Context(), sessionFrom(r), r.PathValue("id")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }

@@ -5,6 +5,7 @@ import type { Goal, StepView } from '../api/schemas';
 import { keys } from '../hooks/queries';
 import { dayMonth } from '../lib/format';
 import { useUi } from '../store/ui';
+import { DeleteButton } from './DeleteButton';
 
 const statusName: Record<Goal['status'], string> = { agreed: 'Согласована', in_progress: 'В работе', done: 'Выполнена' };
 
@@ -103,6 +104,15 @@ export function GoalRow({ g, internId, canAdd = false, steps = [] }: { g: Goal; 
     },
     onError: (e) => toast(e.message, 'error'),
   });
+  // цель, поставленную вручную, руководитель, наставник или администратор может убрать
+  const remove = useMutation({
+    mutationFn: () => api.deleteGoal(g.id),
+    onSuccess: () => {
+      toast('Цель убрана — стажёр получил уведомление');
+      refresh();
+    },
+    onError: (e) => toast(e.message, 'error'),
+  });
   const stepTitle = (id?: string) => steps.find((s) => s.id === id)?.title;
   const done = g.tasks.filter((t) => t.done).length;
   return (
@@ -113,6 +123,9 @@ export function GoalRow({ g, internId, canAdd = false, steps = [] }: { g: Goal; 
           <span className="small muted goal-meta">
             до {dayMonth(g.due)} · {statusName[g.status].toLowerCase()}
           </span>
+          {canAdd && !g.auto && (
+            <DeleteButton what={`цель «${g.title}»`} label="Убрать" note="Убрать цель? Стажёр получит уведомление." pending={remove.isPending} onConfirm={() => remove.mutate()} />
+          )}
         </div>
         <div className="progress-line">
           <div className="progress" role="progressbar" aria-valuenow={g.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Прогресс цели «${g.title}»`}>

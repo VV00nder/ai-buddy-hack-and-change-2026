@@ -116,6 +116,12 @@ func contract(t *testing.T, s Store) {
 	if _, err := s.Goal(ctx, "none"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("goal not found")
 	}
+	if err := s.DeleteGoal(ctx, "g2"); err != nil {
+		t.Fatal(err)
+	}
+	if gs, _ := s.Goals(ctx, "u1"); len(gs) != 1 {
+		t.Fatalf("goal deleted: %+v", gs)
+	}
 	_ = s.AddEvent(ctx, domain.Event{ID: "e1", UserID: "u1", Type: "question_asked", Props: map[string]any{"k": "v"}, At: t0})
 	if e, _ := s.Events(ctx); len(e) != 1 || e[0].Props["k"] != "v" {
 		t.Fatal("events")

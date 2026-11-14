@@ -9,6 +9,7 @@ import (
 
 	"aibuddy/internal/domain"
 	"aibuddy/internal/events"
+	"aibuddy/internal/kv"
 	"aibuddy/internal/onboarding"
 )
 
@@ -328,5 +329,30 @@ func (a *App) SeedGoals(ctx context.Context, seeds map[string][]GoalInput, by ma
 			return err
 		}
 	}
+	return nil
+}
+
+// DeleteGoal — руководитель, наставник стажёра или администратор убирает цель,
+// поставленную вручную. Цели этапов следуют за планом и не удаляются.
+func (a *App) DeleteGoal(ctx context.Context, s kv.Session, id string) error {
+	if strings.HasPrefix(id, "plan-") {
+		return invalid("Цель этапа создаётся из плана — её нельзя убрать, только изменить программу стажёра")
+	}
+	g, err := a.store.Goal(ctx, id)
+	if err != nil {
+		return ErrNotFound
+	}
+	intern, ok := a.userByID(ctx, g.InternID)
+	if !ok {
+		return ErrNotFound
+	}
+	if !canSetGoals(s.User, intern) {
+		return ErrForbidden
+	}
+	if err := a.store.DeleteGoal(ctx, id); err != nil {
+		return err
+	}
+	a.notify(ctx, intern.ID, "goal", fmt.Sprintf("%s убрал(а) цель «%s»", s.User.Name, g.Title), "/plan")
+	a.Track(ctx, s.User.ID, "goal_deleted", map[string]any{"intern": intern.ID})
 	return nil
 }

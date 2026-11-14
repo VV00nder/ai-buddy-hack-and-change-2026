@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { App, Root } from '../App';
-import type { Action } from '../api/schemas';
+import type { Action, InternCard } from '../api/schemas';
 import { keys, makeQueryClient } from '../hooks/queries';
 import { uiStore, useUi, type View } from '../store/ui';
 import { absence, anna, insights, maria, msgs, oleg, plan } from '../test-fixtures';
@@ -25,7 +25,7 @@ import { Login } from './Login';
 import { PlanBody, PlanView } from './PlanView';
 import { Requests } from './Requests';
 import { navFor, Shell } from './Shell';
-import { DeleteButton, InternRequests, MentorsPanel, Team } from './Team';
+import { DeleteButton, filterInterns, InternFilters, InternRequests, MentorsPanel, Team } from './Team';
 import { TodayPanel } from './TodayPanel';
 
 // В SSR Zustand читает getInitialState; в тестах рендерим текущее состояние стора.
@@ -202,10 +202,20 @@ test('plan and today panel', () => {
   assert.match(out, /Спросить buddy/);
   assert.match(html(<PlanBody plan={plan} internId="u-anna" internName="Анна Смирнова" />), /План стажёра/);
   assert.match(html(<PlanView />), /1 неделя/);
-  const lead = html(<PlanView internId="u-anna" />);
+  const asLead = seeded();
+  asLead.setQueryData(keys.me, { user: maria, perms: ['approvals'] });
+  const lead = html(<PlanView internId="u-anna" />, asLead);
   assert.match(lead, /Анна Смирнова/);
   assert.match(lead, /Можно добавить свою цель/);
   assert.match(lead, /\+ цель/);
+  // HR BP видит цели, но не ставит и не убирает их
+  const asHr = seeded();
+  asHr.setQueryData(keys.me, { user: { ...maria, id: 'u-elena', role: 'hrbp' }, perms: [] });
+  assert.doesNotMatch(html(<PlanView internId="u-anna" />, asHr), /\+ цель/);
+  // руководитель убирает цель, поставленную вручную; цели этапов — нет
+  asLead.setQueryData(keys.goals('u-anna'), seeded().getQueryData(keys.goals()));
+  const leadGoals = html(<PlanView internId="u-anna" />, asLead);
+  assert.equal((leadGoals.match(/aria-label="Убрать цель/g) ?? []).length, 2);
   const own = html(<PlanView />);
   assert.match(own, /Цели стажировки/);
   assert.match(own, /Критерий успеха: MR выкачен на staging/);
@@ -681,4 +691,22 @@ test('mentors panel: several mentors, lead edits', () => {
   assert.doesNotMatch(view, /Убрать наставника|Добавить наставника/);
   assert.ok(navFor('lead', new Set()).some((n) => n.label === 'Заявки и вопросы'));
   assert.ok(navFor('mentor', new Set()).some((n) => n.label === 'Заявки и вопросы'));
+});
+
+test('interns filter: search, state, team, mentor', () => {
+  const qc = seeded();
+  const cards = (qc.getQueryData(keys.dashboard) as { interns: InternCard[] }).interns;
+  const f = { q: '', state: 'all', team: '', mentor: '' };
+  assert.equal(filterInterns(cards, f).length, 2);
+  assert.deepEqual(filterInterns(cards, { ...f, q: 'иван' }).map((i) => i.user.name), ['Иван']);
+  assert.deepEqual(filterInterns(cards, { ...f, state: 'late' }).map((i) => i.user.id), ['u-anna']);
+  assert.deepEqual(filterInterns(cards, { ...f, state: 'nogoals' }).map((i) => i.user.id), ['u-x']);
+  assert.equal(filterInterns(cards, { ...f, mentor: 'Олег Кузнецов' }).length, 2);
+  assert.equal(filterInterns(cards, { ...f, mentor: 'Никто' }).length, 0);
+  assert.equal(filterInterns(cards, { ...f, team: 'delivery' }).length, 0);
+  const bar = html(<InternFilters interns={cards} value={{ ...f, state: 'late' }} onChange={() => undefined} shown={1} />);
+  assert.match(bar, /Отстают от плана \(1\)/);
+  assert.match(bar, /Сбросить/);
+  assert.match(bar, /1 из 2/);
+  assert.match(html(<Team />), /Найти: имя, шаг, программа/);
 });

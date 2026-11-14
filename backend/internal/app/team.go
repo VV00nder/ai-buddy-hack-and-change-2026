@@ -112,9 +112,6 @@ func (a *App) Decide(ctx context.Context, s kv.Session, kind, externalID string,
 	if !canApprove(s.User) {
 		return ErrForbidden
 	}
-	if utf8.RuneCountInString(comment) > 500 {
-		return invalid("Комментарий длиннее 500 символов")
-	}
 	tool, decision := "", ""
 	switch kind {
 	case "absence":
@@ -276,8 +273,9 @@ func (a *App) AnswerQuestion(ctx context.Context, s kv.Session, qid, answer stri
 		return q, ErrForbidden
 	}
 	answer = strings.TrimSpace(answer)
-	if utf8.RuneCountInString(answer) < 2 || utf8.RuneCountInString(answer) > 4000 {
-		return q, invalid("Ответ должен быть от 2 до 4000 символов")
+	// длина ответа не ограничена: наставник может расписать подробно
+	if utf8.RuneCountInString(answer) < 2 {
+		return q, invalid("Ответ слишком короткий")
 	}
 	if q.Status == "answered" {
 		return q, invalid("На вопрос уже ответили")

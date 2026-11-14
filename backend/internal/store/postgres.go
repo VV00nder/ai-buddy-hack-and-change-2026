@@ -227,6 +227,11 @@ func (p *Postgres) Goals(ctx context.Context, internID string) ([]domain.Goal, e
 	return getMany[domain.Goal](ctx, p.db, `SELECT data FROM goals WHERE intern_id=$1 ORDER BY created_at, id`, internID)
 }
 
+func (p *Postgres) DeleteGoal(ctx context.Context, id string) error {
+	_, err := p.db.ExecContext(ctx, `DELETE FROM goals WHERE id=$1`, id)
+	return err
+}
+
 func (p *Postgres) AddEvent(ctx context.Context, e domain.Event) error {
 	return p.upsert(ctx, `INSERT INTO events (id, user_id, type, at, data) VALUES ($1,$2,$3,$4,$5)`, e, e.ID, e.UserID, e.Type, e.At)
 }

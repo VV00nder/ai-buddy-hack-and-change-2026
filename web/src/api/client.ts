@@ -64,6 +64,7 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
       call('GET', `/api/goals${internId ? `?internId=${encodeURIComponent(internId)}` : ''}`, obj({ goals: S.Goal.array() })),
     addGoal: (internId: string, g: GoalInput) => call('POST', '/api/goals', obj({ goal: S.Goal }), { internId, ...g }),
     updateGoal: (id: string, patch: { note?: string }) => call('PATCH', `/api/goals/${encodeURIComponent(id)}`, obj({ goal: S.Goal }), patch),
+    deleteGoal: (id: string) => call('DELETE', `/api/goals/${encodeURIComponent(id)}`, ok),
     setGoalTask: (goalId: string, taskId: string, done: boolean) =>
       call('PATCH', `/api/goals/${encodeURIComponent(goalId)}/tasks/${encodeURIComponent(taskId)}`, obj({ goal: S.Goal }), { done }),
     addGoalTask: (goalId: string, t: TaskInput) => call('POST', `/api/goals/${encodeURIComponent(goalId)}/tasks`, obj({ goal: S.Goal }), t),

@@ -43,6 +43,7 @@ type Store interface {
 	SaveGoal(ctx context.Context, g domain.Goal) error
 	Goal(ctx context.Context, id string) (domain.Goal, error)
 	Goals(ctx context.Context, internID string) ([]domain.Goal, error)
+	DeleteGoal(ctx context.Context, id string) error
 
 	AddEvent(ctx context.Context, e domain.Event) error
 	Events(ctx context.Context) ([]domain.Event, error)

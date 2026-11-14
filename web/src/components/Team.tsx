@@ -6,6 +6,8 @@ import { keys, useMe } from '../hooks/queries';
 import { dayMonth, initials, relative, remindAt, remindChoices, reqStatus, time, waited } from '../lib/format';
 import { useUi } from '../store/ui';
 import { ApprovalRow } from './Approvals';
+import { DeleteButton } from './DeleteButton';
+export { DeleteButton };
 import { AnswerForm } from './Inbox';
 import { PlanView } from './PlanView';
 import { ProgramPanel } from './Programs';
@@ -15,6 +17,15 @@ import { QuizResultsPanel } from './QuizResults';
  *  и напоминания — на одной странице, без лишних переходов. */
 export function Team() {
   const { internId, go } = useUi();
+  const [filter, setFilter] = useState<InternFilter>(loadFilter);
+  const changeFilter = (f: InternFilter) => {
+    setFilter(f);
+    try {
+      localStorage.setItem(filterKey, JSON.stringify(f));
+    } catch {
+      /* фильтр — только удобство: без хранилища просто не запоминается */
+    }
+  };
   const q = useQuery({ queryKey: keys.dashboard, queryFn: api.dashboard });
   if (internId) {
     const card = q.data?.interns.find((i) => i.user.id === internId);
@@ -41,6 +52,7 @@ export function Team() {
   if (q.isError) return <p className="error">{q.error.message}</p>;
   const d = q.data;
   const behind = d.interns.filter((i) => i.overdue > 0).length;
+  const shown = filterInterns(d.interns, filter);
   // заявки стажёров — внутри строки стажёра; здесь только заявки остальных сотрудников (если есть)
   const internIds = new Set(d.interns.map((i) => i.user.id));
   const others = d.approvals.filter((a) => !internIds.has(a.userId));
@@ -70,24 +82,28 @@ export function Team() {
             <h2>У вас нет стажёров</h2>
           </div>
         ) : (
-          <table className="compact-table">
-            <thead>
-              <tr>
-                <th scope="col">Стажёр</th>
-                <th scope="col">День</th>
-                <th scope="col">План</th>
-                <th scope="col">Цели</th>
-                <th scope="col">Тесты</th>
-                <th scope="col">Заявки</th>
-                <th scope="col">Следующий шаг</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.interns.map((i) => (
-                <InternRow key={i.user.id} i={i} onOpen={() => go('team', { internId: i.user.id })} />
-              ))}
-            </tbody>
-          </table>
+          <>
+            <InternFilters interns={d.interns} value={filter} onChange={changeFilter} shown={shown.length} />
+            {shown.length === 0 && <p className="muted small">Никто не подходит под фильтр.</p>}
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th scope="col">Стажёр</th>
+                  <th scope="col">День</th>
+                  <th scope="col">План</th>
+                  <th scope="col">Цели</th>
+                  <th scope="col">Тесты</th>
+                  <th scope="col">Заявки</th>
+                  <th scope="col">Следующий шаг</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((i) => (
+                  <InternRow key={i.user.id} i={i} onOpen={() => go('team', { internId: i.user.id })} />
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
       <aside className="cab-side">
@@ -314,24 +330,6 @@ export function InternRequests({ internId, compact = false }: { internId: string
   );
 }
 
-/** Удаление в два шага: «Удалить» → «Удалить? Да / Нет», без системных диалогов. */
-export function DeleteButton({ what, pending, onConfirm }: { what: string; pending: boolean; onConfirm: () => void }) {
-  const [asking, setAsking] = useState(false);
-  if (!asking)
-    return (
-      <button className="link small req-del" aria-label={`Удалить ${what}`} onClick={() => setAsking(true)}>
-        Удалить
-      </button>
-    );
-  return (
-    <span className="req-del confirm" role="group" aria-label={`Подтвердите удаление: ${what}`}>
-      <span className="small">Удалить? Стажёр получит уведомление.</span>
-      <button className="btn danger small" disabled={pending} onClick={onConfirm}>Да, удалить</button>
-      <button className="link small" onClick={() => setAsking(false)}>Нет</button>
-    </span>
-  );
-}
-
 /** Свои напоминания: на заявку, задачу или что угодно — придут уведомлением. */
 export function Reminders({ list }: { list: Reminder[] }) {
   const qc = useQueryClient();
@@ -442,5 +440,93 @@ export function MentorsPanel({ intern, names = [] }: { intern: User; names?: str
         </span>
       )}
     </section>
+  );
+}
+
+/** Фильтр стажёров в кабинете: поиск, состояние, отдел, наставник. */
+export type InternFilter = { q: string; state: string; team: string; mentor: string };
+const emptyFilter: InternFilter = { q: '', state: 'all', team: '', mentor: '' };
+const filterKey = 'aibuddy.internFilter';
+
+function loadFilter(): InternFilter {
+  try {
+    const v = JSON.parse(localStorage.getItem(filterKey) ?? 'null') as InternFilter | null;
+    return v && typeof v === 'object' ? { ...emptyFilter, ...v } : emptyFilter;
+  } catch {
+    return emptyFilter;
+  }
+}
+
+export const internStates: { value: string; label: string; test: (i: InternCard) => boolean }[] = [
+  { value: 'all', label: 'Все', test: () => true },
+  { value: 'late', label: 'Отстают от плана', test: (i) => i.overdue > 0 },
+  { value: 'waiting', label: 'Ждут моего решения', test: (i) => i.pendingApprovals > 0 },
+  { value: 'questions', label: 'Есть вопросы без ответа', test: (i) => i.openQuestions > 0 },
+  { value: 'quiz', label: 'Не сдан тест', test: (i) => i.quizzesFailed > 0 },
+  { value: 'nogoals', label: 'Без своих целей', test: (i) => i.goalsTotal === 0 },
+  { value: 'alerts', label: 'Требуют внимания', test: (i) => i.alerts.length > 0 },
+];
+
+/** filterInterns — стажёры, подходящие под фильтр. */
+export function filterInterns(list: InternCard[], f: InternFilter): InternCard[] {
+  const q = f.q.trim().toLowerCase();
+  const state = internStates.find((s) => s.value === f.state) ?? internStates[0]!;
+  return list.filter(
+    (i) =>
+      (!q || `${i.user.name} ${i.user.email ?? ''} ${i.nextStep ?? ''} ${i.templateName ?? ''}`.toLowerCase().includes(q)) &&
+      state.test(i) &&
+      (!f.team || i.user.team === f.team) &&
+      (!f.mentor || i.mentorName.split(', ').includes(f.mentor)),
+  );
+}
+
+export function InternFilters({ interns, value, onChange, shown }: { interns: InternCard[]; value: InternFilter; onChange: (f: InternFilter) => void; shown: number }) {
+  const teams = [...new Map(interns.map((i) => [i.user.team, i.user.teamName ?? i.user.team])).entries()].filter(([id]) => id);
+  const mentors = [...new Set(interns.flatMap((i) => (i.mentorName ? i.mentorName.split(', ') : [])))].sort();
+  const set = (patch: Partial<InternFilter>) => onChange({ ...value, ...patch });
+  const active = value.q || value.state !== 'all' || value.team || value.mentor;
+  return (
+    <div className="intern-filters" role="search" aria-label="Фильтр стажёров">
+      <label className="sr-only" htmlFor="if-q">Найти стажёра</label>
+      <input id="if-q" value={value.q} onChange={(e) => set({ q: e.target.value })} placeholder="Найти: имя, шаг, программа" />
+      <label className="sr-only" htmlFor="if-state">Состояние</label>
+      <select id="if-state" value={value.state} onChange={(e) => set({ state: e.target.value })}>
+        {internStates.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label} ({interns.filter(s.test).length})
+          </option>
+        ))}
+      </select>
+      {teams.length > 1 && (
+        <>
+          <label className="sr-only" htmlFor="if-team">Отдел</label>
+          <select id="if-team" value={value.team} onChange={(e) => set({ team: e.target.value })}>
+            <option value="">Все отделы</option>
+            {teams.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+        </>
+      )}
+      {mentors.length > 1 && (
+        <>
+          <label className="sr-only" htmlFor="if-mentor">Наставник</label>
+          <select id="if-mentor" value={value.mentor} onChange={(e) => set({ mentor: e.target.value })}>
+            <option value="">Все наставники</option>
+            {mentors.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </>
+      )}
+      {active && (
+        <>
+          <span className="small muted">
+            {shown} из {interns.length}
+          </span>
+          <button className="link small" onClick={() => onChange(emptyFilter)}>Сбросить</button>
+        </>
+      )}
+    </div>
   );
 }

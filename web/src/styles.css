@@ -647,3 +647,6 @@ select { border: 1px solid var(--line); border-radius: var(--radius-s); padding:
 .mentor-add { display: inline-flex; gap: 6px; align-items: center; }
 .mentor-add select { font-size: 13px; padding: 4px 6px; }
 .question.compact { flex: 1 1 100%; padding: 8px 0 0; border: 0; box-shadow: none; background: none; }
+.intern-filters { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-bottom: 8px; }
+.intern-filters input { flex: 1 1 200px; max-width: 280px; padding: 6px 10px; font-size: 14px; }
+.intern-filters select { font-size: 13px; padding: 5px 6px; max-width: 240px; }
