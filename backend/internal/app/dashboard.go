@@ -139,7 +139,9 @@ type InternRequest struct {
 	// AwaitingMe — решение по заявке ждёт текущего пользователя.
 	AwaitingMe bool `json:"awaitingMe"`
 	// Approval — данные для решения прямо в карточке (если ждёт текущего пользователя).
-	Approval *Approval `json:"approval,omitempty"`
+	Approval   *Approval `json:"approval,omitempty"`
+	InternID   string    `json:"internId"`
+	InternName string    `json:"internName"`
 }
 
 // InternRequests — какие заявки отправлял стажёр и какие ещё не согласованы.
@@ -151,18 +153,58 @@ func (a *App) InternRequests(ctx context.Context, s kv.Session, internID string)
 	if !canViewIntern(s.User, intern) {
 		return nil, ErrForbidden
 	}
-	acts, err := a.store.Actions(ctx, internID)
+	return a.requestsOf(ctx, intern, a.myApprovals(ctx, s))
+}
+
+// myApprovals — заявки, которые ждут решения пользователя, по номеру заявки.
+func (a *App) myApprovals(ctx context.Context, s kv.Session) map[string]Approval {
+	mine := map[string]Approval{}
+	if ap, err := a.Approvals(ctx, s); err == nil {
+		for _, x := range ap {
+			x.WaitingHours = waitingHours(x.Details, a.now())
+			mine[x.ExternalID] = x
+		}
+	}
+	return mine
+}
+
+// AllRequests — заявки всех стажёров, которых видит пользователь: руководитель — своего
+// отдела, администратор — всех, заместитель — стажёров руководителя, за которого он решает.
+// Ждущие решения пользователя — сверху, затем остальные, новые выше.
+func (a *App) AllRequests(ctx context.Context, s kv.Session) ([]InternRequest, error) {
+	acting := a.actingFor(ctx, s)
+	if !canApprove(s.User) && len(acting) == 0 {
+		return nil, ErrForbidden
+	}
+	users, err := a.DemoUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	mine := map[string]Approval{}
-	if canApprove(s.User) {
-		if ap, err := a.Approvals(ctx, s); err == nil {
-			for _, x := range ap {
-				x.WaitingHours = waitingHours(x.Details, a.now())
-				mine[x.ExternalID] = x
-			}
+	mine := a.myApprovals(ctx, s)
+	out := []InternRequest{}
+	for _, intern := range users {
+		if intern.Role != domain.RoleIntern || !(canViewIntern(s.User, intern) || acting[intern.LeadID]) {
+			continue
 		}
+		rs, err := a.requestsOf(ctx, intern, mine)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rs...)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].AwaitingMe != out[j].AwaitingMe {
+			return out[i].AwaitingMe
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
+func (a *App) requestsOf(ctx context.Context, intern domain.User, mine map[string]Approval) ([]InternRequest, error) {
+	acts, err := a.store.Actions(ctx, intern.ID)
+	if err != nil {
+		return nil, err
 	}
 	out := []InternRequest{}
 	for _, ac := range acts {
@@ -171,7 +213,7 @@ func (a *App) InternRequests(ctx context.Context, s kv.Session, internID string)
 			continue
 		}
 		r := InternRequest{ID: ac.ID, Kind: ac.Kind, Title: ac.Title, Status: ac.Status, ExternalID: ac.ExternalID,
-			Comment: comment(ac), CreatedAt: ac.CreatedAt}
+			Comment: comment(ac), CreatedAt: ac.CreatedAt, InternID: intern.ID, InternName: intern.Name}
 		if ap, ok := mine[ac.ExternalID]; ok && ac.ExternalID != "" {
 			r.AwaitingMe, r.Approval = true, &ap
 		}

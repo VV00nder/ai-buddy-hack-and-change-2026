@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	auth("GET /api/dashboard", s.dashboard)
 	auth("GET /api/team/{intern}/requests", s.internRequests)
 	auth("DELETE /api/team/{intern}/requests/{id}", s.deleteRequest)
+	auth("GET /api/requests", s.allRequests)
 	auth("DELETE /api/team/{intern}/questions/{id}", s.deleteQuestion)
 	auth("PUT /api/team/{intern}/mentors", s.setMentors)
 	auth("GET /api/reminders", s.reminders)
@@ -440,7 +441,7 @@ func (s *Server) internRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"requests": rs, "questions": qs, "canDelete": s.app.CanManageIntern(r.Context(), ses.User, id),
-		"canAnswer": s.app.CanAnswer(r.Context(), ses.User, id)})
+		"canAnswer": s.app.CanAnswer(r.Context(), ses, id)})
 }
 
 func (s *Server) setMentors(w http.ResponseWriter, r *http.Request) {
@@ -710,7 +711,7 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) inbox(w http.ResponseWriter, r *http.Request) {
-	q, err := s.app.Inbox(r.Context(), sessionFrom(r).User)
+	q, err := s.app.Inbox(r.Context(), sessionFrom(r))
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -726,7 +727,7 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	q, err := s.app.AnswerQuestion(r.Context(), sessionFrom(r).User, r.PathValue("id"), in.Answer, in.AddToFAQ)
+	q, err := s.app.AnswerQuestion(r.Context(), sessionFrom(r), r.PathValue("id"), in.Answer, in.AddToFAQ)
 	if err != nil {
 		s.fail(w, err)
 		return
@@ -1218,4 +1219,13 @@ func (s *Server) adminPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (s *Server) allRequests(w http.ResponseWriter, r *http.Request) {
+	rs, err := s.app.AllRequests(r.Context(), sessionFrom(r))
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"requests": rs})
 }

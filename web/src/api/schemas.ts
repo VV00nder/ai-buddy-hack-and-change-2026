@@ -417,6 +417,8 @@ export const InternRequest = z.object({
   createdAt: z.string(),
   awaitingMe: z.boolean(),
   approval: Approval.nullish(),
+  internId: z.string().optional().default(''),
+  internName: z.string().optional().default(''),
 });
 export type InternRequest = z.infer<typeof InternRequest>;
 

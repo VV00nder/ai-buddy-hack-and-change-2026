@@ -289,9 +289,9 @@ func (a *App) ResetPassword(ctx context.Context, s kv.Session, userID, password 
 }
 
 // CanAnswer — может ли пользователь отвечать на вопросы стажёра.
-func (a *App) CanAnswer(ctx context.Context, u domain.User, internID string) bool {
+func (a *App) CanAnswer(ctx context.Context, s kv.Session, internID string) bool {
 	intern, ok := a.userByID(ctx, internID)
-	return ok && canAnswer(u, intern)
+	return ok && a.mayAnswer(ctx, s, intern)
 }
 
 // SetMentors — руководитель стажёра или администратор назначает стажёру наставников.

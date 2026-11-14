@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api/client';
-import type { InternCard, InternRequest, Reminder, User } from '../api/schemas';
+import type { InternCard, Reminder, User } from '../api/schemas';
 import { keys, useMe } from '../hooks/queries';
-import { dayMonth, initials, relative, remindAt, remindChoices, time, waited } from '../lib/format';
+import { dayMonth, initials, relative, remindAt, remindChoices, reqStatus, time, waited } from '../lib/format';
 import { useUi } from '../store/ui';
 import { ApprovalRow } from './Approvals';
 import { AnswerForm } from './Inbox';
@@ -216,14 +216,6 @@ export function InternSummaryPop({ i }: { i: InternCard }) {
   );
 }
 
-const reqStatus: Record<InternRequest['status'], string> = {
-  proposed: 'черновик',
-  submitted: 'ждёт решения',
-  approved: 'согласовано',
-  rejected: 'отклонено',
-  cancelled: 'отменено',
-  failed: 'ошибка',
-};
 
 /** Что стажёр просил согласовать: открытые заявки сверху, свои — с отметкой «ждёт вас». */
 export function InternRequests({ internId, compact = false }: { internId: string; compact?: boolean }) {
@@ -234,6 +226,8 @@ export function InternRequests({ internId, compact = false }: { internId: string
     void qc.invalidateQueries({ queryKey: keys.internRequests(internId) });
     void qc.invalidateQueries({ queryKey: keys.dashboard });
     void qc.invalidateQueries({ queryKey: keys.approvals });
+    void qc.invalidateQueries({ queryKey: keys.allRequests });
+    void qc.invalidateQueries({ queryKey: keys.inbox });
   };
   const delReq = useMutation({
     mutationFn: (id: string) => api.deleteRequest(internId, id),

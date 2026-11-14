@@ -246,7 +246,31 @@ test('mentor and lead screens', () => {
   assert.match(row, /Напомнить…/);
   const noA = seeded();
   noA.setQueryData(keys.approvals, { approvals: [] });
-  assert.match(html(<Approvals />, noA), /Нечего согласовывать/);
+  noA.setQueryData(keys.inbox, { questions: [] });
+  assert.match(html(<Approvals />, noA), /Нет заявок и вопросов/);
+  // вкладка «Заявки и вопросы»: ждущие решения, вопросы стажёров с ответом на месте, все заявки
+  const tab = seeded();
+  tab.setQueryData(keys.inbox, {
+    questions: [
+      { id: 'q1', internId: 'u-anna', internName: 'Анна Смирнова', mentorId: 'u-oleg', text: 'Где стенд?', status: 'open', createdAt: '2026-11-13T10:00:00Z' },
+      { id: 'q2', internId: 'u-anna', internName: 'Анна Смирнова', mentorId: 'u-oleg', text: 'Где логи?', status: 'answered', answer: 'В Observer', answeredBy: 'Мария Волкова', createdAt: '2026-11-12T10:00:00Z' },
+    ],
+  });
+  tab.setQueryData(keys.allRequests, {
+    requests: [
+      { id: 'r1', kind: 'access', title: 'Доступ: Stash', status: 'approved', externalId: 'ACC-1', comment: 'ок', createdAt: '2026-11-10T10:00:00Z', awaitingMe: false, internId: 'u-anna', internName: 'Анна Смирнова' },
+      { id: 'r2', kind: 'absence', title: 'Отгул 13.11', status: 'submitted', createdAt: '2026-11-11T10:00:00Z', awaitingMe: true, internId: 'u-anna', internName: 'Анна Смирнова' },
+    ],
+  });
+  const page = html(<Approvals />, tab);
+  assert.match(page, /Ждут вашего решения · 1/);
+  assert.match(page, /Вопросы стажёров · 1 без ответа/);
+  assert.match(page, /Где стенд\?/);
+  assert.match(page, /Ответ стажёру/);
+  assert.match(page, /Отвеченные · 1/);
+  assert.match(page, /Все заявки стажёров/);
+  assert.match(page, /Доступ: Stash/);
+  assert.match(page, /согласовано/);
   useUi.getState().go('team');
   const team = html(<Team />);
   assert.match(team, /1 без ответа/);
@@ -565,9 +589,11 @@ test('admin: nav, service, all employees; reject with reason; requests inline', 
   const admin = { ...maria, id: 'u-admin', login: 'admin', name: 'Ирина Белова', role: 'admin' as const, team: '', teamName: '' };
   const nav = navFor('admin', new Set(['admin', 'approvals', 'kb', 'programs'])).map((n) => n.label);
   for (const l of ['Стажёры', 'Сотрудники и права', 'Сервис', 'Шаблоны обучения', 'Инструкции', 'Тесты']) assert.ok(nav.includes(l), l);
-  assert.ok(!nav.includes('Согласования'));
-  assert.ok(!navFor('lead', new Set(['approvals'])).some((n) => n.view === 'approvals'));
-  assert.ok(navFor('engineer', new Set(['approvals'])).some((n) => n.view === 'approvals'));
+  assert.ok(nav.includes('Заявки и вопросы'));
+  assert.equal(navFor('lead', new Set(['approvals'])).filter((n) => n.view === 'approvals').length, 1);
+  // право «Согласование заявок» открывает вкладку сотруднику, у которого её не было
+  assert.ok(navFor('hrbp', new Set(['approvals'])).some((n) => n.label === 'Заявки и вопросы'));
+  assert.ok(!navFor('hrbp', new Set()).some((n) => n.view === 'approvals'));
   const qc = seeded();
   qc.setQueryData(keys.me, { user: admin, perms: ['admin', 'approvals', 'kb', 'programs'] });
   qc.setQueryData(keys.service, {
@@ -653,6 +679,6 @@ test('mentors panel: several mentors, lead edits', () => {
   ro.setQueryData(keys.me, { user: oleg, perms: [] });
   const view = html(<MentorsPanel intern={intern} names={['Олег Кузнецов', 'Павел Егоров']} />, ro);
   assert.doesNotMatch(view, /Убрать наставника|Добавить наставника/);
-  assert.ok(navFor('lead', new Set()).some((n) => n.label === 'Вопросы стажёров'));
-  assert.ok(navFor('admin', new Set(['admin'])).some((n) => n.label === 'Вопросы стажёров'));
+  assert.ok(navFor('lead', new Set()).some((n) => n.label === 'Заявки и вопросы'));
+  assert.ok(navFor('mentor', new Set()).some((n) => n.label === 'Заявки и вопросы'));
 });

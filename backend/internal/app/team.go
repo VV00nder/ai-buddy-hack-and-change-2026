@@ -184,10 +184,36 @@ func canAnswer(u, intern domain.User) bool {
 	return isAdmin(u) || (u.Role == domain.RoleLead && intern.LeadID == u.ID) || intern.HasMentor(u.ID)
 }
 
+// actingFor — руководители, за которых пользователь решает заявки (выданное право «Согласование заявок»).
+func (a *App) actingFor(ctx context.Context, s kv.Session) map[string]bool {
+	out := map[string]bool{}
+	if s.User.Role == domain.RoleIntern || s.User.Role == domain.RoleNewcomer || s.User.Role == domain.RoleLead || isAdmin(s.User) {
+		return out
+	}
+	res, err := a.corp.Call(ctx, s.Token, "delegation_list", nil)
+	if err != nil {
+		return out
+	}
+	for _, x := range asList(res["actingFor"]) {
+		if m, ok := x.(map[string]any); ok {
+			out[fmt.Sprint(m["id"])] = true
+		}
+	}
+	return out
+}
+
+// mayAnswer — может ли пользователь ответить стажёру: наставник, руководитель, администратор
+// или заместитель руководителя стажёра.
+func (a *App) mayAnswer(ctx context.Context, s kv.Session, intern domain.User) bool {
+	return canAnswer(s.User, intern) || a.actingFor(ctx, s)[intern.LeadID]
+}
+
 // Inbox — вопросы стажёров, на которые пользователь может ответить: наставнику — его стажёров,
 // руководителю — стажёров отдела, администратору — всех.
-func (a *App) Inbox(ctx context.Context, u domain.User) ([]domain.Question, error) {
-	if u.Role != domain.RoleMentor && u.Role != domain.RoleLead && !isAdmin(u) {
+func (a *App) Inbox(ctx context.Context, s kv.Session) ([]domain.Question, error) {
+	u := s.User
+	acting := a.actingFor(ctx, s)
+	if u.Role != domain.RoleMentor && u.Role != domain.RoleLead && !isAdmin(u) && len(acting) == 0 {
 		return nil, ErrForbidden
 	}
 	users, err := a.DemoUsers(ctx)
@@ -196,7 +222,7 @@ func (a *App) Inbox(ctx context.Context, u domain.User) ([]domain.Question, erro
 	}
 	out := []domain.Question{}
 	for _, intern := range users {
-		if intern.Role != domain.RoleIntern || !canAnswer(u, intern) {
+		if intern.Role != domain.RoleIntern || !(canAnswer(u, intern) || acting[intern.LeadID]) {
 			continue
 		}
 		qs, err := a.store.QuestionsOfIntern(ctx, intern.ID)
@@ -236,7 +262,8 @@ func (a *App) MyQuestions(ctx context.Context, u domain.User) ([]domain.Question
 
 // AnswerQuestion — наставник отвечает; ответ приходит стажёру в чат и,
 // по желанию, сохраняется в базу знаний команды.
-func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer string, addToFAQ bool) (domain.Question, error) {
+func (a *App) AnswerQuestion(ctx context.Context, s kv.Session, qid, answer string, addToFAQ bool) (domain.Question, error) {
+	u := s.User
 	q, err := a.store.Question(ctx, qid)
 	if err != nil {
 		return q, ErrNotFound
@@ -245,7 +272,7 @@ func (a *App) AnswerQuestion(ctx context.Context, u domain.User, qid, answer str
 		return q, ErrNotFound
 	}
 	intern, ok := a.userByID(ctx, q.InternID)
-	if !ok || !canAnswer(u, intern) {
+	if !ok || !a.mayAnswer(ctx, s, intern) {
 		return q, ErrForbidden
 	}
 	answer = strings.TrimSpace(answer)

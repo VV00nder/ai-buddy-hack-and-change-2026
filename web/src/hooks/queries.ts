@@ -14,6 +14,7 @@ export const keys = {
   notifications: ['notifications'] as const,
   approvals: ['approvals'] as const,
   inbox: ['inbox'] as const,
+  allRequests: ['allRequests'] as const,
   team: ['team'] as const,
   insights: ['insights'] as const,
   internPlan: (id: string) => ['internPlan', id] as const,

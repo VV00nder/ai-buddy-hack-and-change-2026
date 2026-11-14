@@ -121,7 +121,7 @@ await logout();
 // 5. Руководитель согласует
 await caption('Руководитель Мария видит заявки внутри строки стажёра и решает в один клик', 1800);
 await loginAs('Мария Волкова');
-check('у руководителя нет отдельной вкладки согласований', (await page.getByRole('button', { name: 'Согласования', exact: true }).count()) === 0);
+check('у руководителя есть вкладка «Заявки и вопросы»', (await page.getByRole('button', { name: 'Заявки и вопросы', exact: true }).count()) === 1);
 await page.locator('.cab-interns tbody tr', { hasText: 'Анна Смирнова' }).first().locator('.req-toggle').click();
 await page.locator('.row-expand .approval').first().waitFor();
 check('у руководителя только отгул — внутри строки Анны', (await page.locator('.approval').count()) === 1);
@@ -136,17 +136,17 @@ await logout();
 // 6. Наставник отвечает и пополняет базу знаний
 await caption('Олег — наставник и владелец репозитория: согласует доступ и отвечает на вопрос', 2200);
 await loginAs('Олег Кузнецов');
-await page.getByRole('button', { name: 'Согласования', exact: true }).click();
+await page.getByRole('button', { name: 'Заявки и вопросы', exact: true }).click();
 await page.locator('.approval').first().waitFor();
 await pause(800);
 await page.locator('.approval').first().getByRole('button', { name: 'Согласовать' }).click();
-await page.getByText('Нечего согласовывать').waitFor();
+await page.getByText('Согласовано — стажёр получил уведомление').waitFor();
 await pause(600);
-await page.getByRole('button', { name: 'Вопросы стажёров', exact: true }).click();
+check('заявки и вопросы на одной вкладке', (await page.getByPlaceholder('Ответ стажёру').count()) === 1);
 await page.getByPlaceholder('Ответ стажёру').fill('Стенд поиска — search-staging, ссылка в README сервиса. Доступ есть у всех инженеров команды.');
 await pause(800);
 await page.getByRole('button', { name: 'Ответить' }).click();
-await page.getByText('Новых вопросов нет').waitFor();
+await page.getByText('Отвеченные · 1').waitFor();
 await pause(1000);
 await logout();
 
@@ -155,6 +155,7 @@ const cron = await fetch(BASE + '/api/cron/reminders', { method: 'POST', headers
 check('ИИ-крон отправил утренние сводки', cron.digests >= 1);
 await caption('Наутро внутренний ИИ-крон запускает напоминания. Анна открывает AI-buddy', 2200);
 await loginAs('Анна Смирнова');
+await page.locator('.bubble.proactive').first().waitFor({ timeout: 5000 }).catch(() => {});
 check('утренняя сводка в чате', (await page.locator('.bubble.proactive').count()) === 1);
 await page.locator('.bubble.proactive').scrollIntoViewIfNeeded();
 await caption('Утренняя сводка: день стажировки и следующий шаг. Плюс статусы заявок и ответ наставника', 2800);

@@ -31,8 +31,7 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'knowledge', label: 'Инструкции' },
   ],
   mentor: [
-    { view: 'inbox', label: 'Вопросы стажёров' },
-    { view: 'approvals', label: 'Согласования' },
+    { view: 'approvals', label: 'Заявки и вопросы' },
     { view: 'team', label: 'Стажёры' },
     { view: 'programs', label: 'Шаблоны обучения' },
     { view: 'insights', label: 'Польза' },
@@ -40,10 +39,10 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'knowledge', label: 'Инструкции' },
     { view: 'quizzes', label: 'Тесты' },
   ],
-  // заявки стажёров руководитель решает внутри «Стажёров» — отдельной вкладки нет
+  // заявки и вопросы стажёров: в строке и карточке стажёра и все вместе — во вкладке «Заявки и вопросы»
   lead: [
     { view: 'team', label: 'Стажёры' },
-    { view: 'inbox', label: 'Вопросы стажёров' },
+    { view: 'approvals', label: 'Заявки и вопросы' },
     { view: 'programs', label: 'Шаблоны обучения' },
     { view: 'rights', label: 'Отдел и права' },
     { view: 'insights', label: 'Польза' },
@@ -52,14 +51,14 @@ const navByRole: Record<User['role'], NavItem[]> = {
     { view: 'quizzes', label: 'Тесты' },
   ],
   engineer: [
-    { view: 'approvals', label: 'Согласования' },
+    { view: 'approvals', label: 'Заявки и вопросы' },
     { view: 'chat', label: 'Чат' },
     { view: 'knowledge', label: 'Инструкции' },
   ],
   newcomer: [],
   admin: [
     { view: 'team', label: 'Стажёры' },
-    { view: 'inbox', label: 'Вопросы стажёров' },
+    { view: 'approvals', label: 'Заявки и вопросы' },
     { view: 'rights', label: 'Сотрудники и права' },
     { view: 'service', label: 'Сервис' },
     { view: 'programs', label: 'Шаблоны обучения' },
@@ -80,8 +79,8 @@ const navByRole: Record<User['role'], NavItem[]> = {
 /** navFor — разделы по роли и выданным правам. */
 export function navFor(role: User['role'], perms: Set<string>): NavItem[] {
   const nav = [...navByRole[role]];
-  const inTeam = role === 'lead' || role === 'admin';
-  if (perms.has('approvals') && !inTeam && !nav.some((n) => n.view === 'approvals')) nav.unshift({ view: 'approvals', label: 'Согласования' });
+  // право «Согласование заявок» открывает ту же вкладку, что у руководителя
+  if (perms.has('approvals') && !nav.some((n) => n.view === 'approvals')) nav.unshift({ view: 'approvals', label: 'Заявки и вопросы' });
   if (perms.has('kb') && !nav.some((n) => n.view === 'quizzes')) nav.push({ view: 'quizzes', label: 'Тесты' });
   return nav;
 }

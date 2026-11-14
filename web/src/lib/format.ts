@@ -117,3 +117,13 @@ export function firstName(full: string): string {
   const f = full.trim().split(/\s+/).filter(Boolean);
   return f.length >= 3 ? f[1]! : (f[0] ?? 'коллега');
 }
+
+/** reqStatus — статус заявки по-русски. */
+export const reqStatus: Record<string, string> = {
+  proposed: 'черновик',
+  submitted: 'ждёт решения',
+  approved: 'согласовано',
+  rejected: 'отклонено',
+  cancelled: 'отменено',
+  failed: 'ошибка',
+};

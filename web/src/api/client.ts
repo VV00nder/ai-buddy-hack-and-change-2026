@@ -103,6 +103,7 @@ export function createApi(fetchImpl: FetchLike = (...a) => fetch(...a), base = '
     decide: (kind: string, id: string, approve: boolean, comment: string) =>
       call('POST', `/api/approvals/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, ok, { approve, comment }),
     inbox: () => call('GET', '/api/inbox', obj({ questions: S.Question.array() })),
+    allRequests: () => call('GET', '/api/requests', obj({ requests: S.InternRequest.array() })),
     answer: (id: string, answer: string, addToFaq: boolean) =>
       call('POST', `/api/inbox/${encodeURIComponent(id)}/answer`, obj({ question: S.Question }), { answer, addToFaq }),
     notifications: () => call('GET', '/api/notifications', obj({ notifications: S.Notification.array() })),
